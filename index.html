@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Madson Melo | Gerente de Operações · Distribuição de Energia</title>
+  <meta name="description" content="Madson Melo — executivo de operações com mais de 25 anos na distribuição de energia. Redução de perdas, DEC/FEC, gestão da receita, dados e IA aplicados à operação.">
+  <meta name="author" content="Madson Melo">
+  <meta name="theme-color" content="#0B1220">
+  <!-- EDITAR: se mudar o endereço do site, troque a URL abaixo (canonical, og:url e og:image) -->
+  <link rel="canonical" href="https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/">
+
+  <!-- Open Graph / redes sociais -->
+  <meta property="og:type" content="profile">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="Madson Melo">
+  <meta property="og:title" content="Madson Melo | Gerente de Operações · Distribuição de Energia">
+  <meta property="og:description" content="Transformo dados em decisões e operações em resultado.">
+  <meta property="og:url" content="https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/">
+  <meta property="og:image" content="https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Madson Melo — Gerente de Operações, Distribuição de Energia">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Madson Melo | Gerente de Operações">
+  <meta name="twitter:description" content="Transformo dados em decisões e operações em resultado.">
+  <meta name="twitter:image" content="https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/og-image.png">
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <!-- Fontes carregadas sem bloquear a renderização -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"></noscript>
+  <link rel="stylesheet" href="style.css">
+
+  <script>
+    // Marca que o JS está ativo (o CSS esconde elementos que serão animados).
+    // Rede de segurança: se as bibliotecas não carregarem em 3s, mostra tudo.
+    document.documentElement.classList.add('js');
+    setTimeout(function () {
+      if (!document.documentElement.classList.contains('anim-ready')) {
+        document.documentElement.classList.add('no-anim');
+      }
+    }, 3000);
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "name": "Madson Melo",
+    "jobTitle": "Gerente de Operações",
+    "description": "Executivo de operações na distribuição de energia elétrica.",
+    "url": "https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/",
+    "knowsAbout": ["Distribuição de energia", "Perdas técnicas e não técnicas", "DEC/FEC", "Gestão da receita", "Gestão de OPEX", "Dados e IA aplicados"],
+    "sameAs": ["https://www.linkedin.com/in/SEU-PERFIL"]
+  }
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  <div class="progress" aria-hidden="true"><span class="progress__bar"></span></div>
+  <div class="cursor" aria-hidden="true"><span class="cursor__dot"></span><span class="cursor__ring"></span></div>
+
+  <header class="nav" id="topo">
+    <a class="nav__brand" href="#inicio" aria-label="Madson Melo — início">
+      <span class="nav__mark" aria-hidden="true"></span>Madson Melo
+    </a>
+    <nav aria-label="Navegação principal">
+      <ul class="nav__links">
+        <li><a href="#sobre">Sobre</a></li>
+        <li><a href="#trajetoria">Trajetória</a></li>
+        <li><a href="#cases">Cases</a></li>
+        <li><a href="#contato">Contato</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="conteudo" tabindex="-1">
+    <!-- ================= 1. HERO ================= -->
+    <section class="hero" id="inicio" aria-labelledby="hero-title">
+      <canvas class="hero__canvas" aria-hidden="true"></canvas>
+      <div class="hero__glow" aria-hidden="true"></div>
+      <div class="container hero__inner">
+        <p class="eyebrow hero__eyebrow" data-hero>Gerente de Operações | Distribuição de Energia</p>
+        <h1 class="hero__title" id="hero-title">
+          <span class="hero__name">Madson Melo</span>
+          <span class="hero__phrase" data-split>Transformo dados em decisões e operações em <em>resultado.</em></span>
+        </h1>
+        <p class="hero__lead" data-hero>Mais de 25 anos na distribuição de energia elétrica, unindo rigor operacional, visão financeira e decisões orientadas por dados.</p>
+        <div class="hero__ctas" data-hero>
+          <a class="btn btn--primary magnetic" href="#cases"><span>Ver cases</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <a class="btn btn--ghost magnetic" href="#contato"><span>Falar comigo</span></a>
+          <!-- EDITAR: URL do LinkedIn -->
+          <a class="btn btn--icon magnetic" href="https://www.linkedin.com/in/SEU-PERFIL" target="_blank" rel="noopener" aria-label="LinkedIn de Madson Melo (abre em nova aba)">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-fill"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.75h4v11H3zM9.5 9.75h3.8v1.5h.06c.53-1 1.83-2.06 3.77-2.06 4.03 0 4.77 2.65 4.77 6.1v5.46h-4v-4.84c0-1.16-.02-2.64-1.61-2.64-1.61 0-1.86 1.26-1.86 2.56v4.92h-4z"/></svg>
+          </a>
+        </div>
+      </div>
+      <a class="hero__scroll" href="#numeros" aria-label="Rolar para os números"><span></span></a>
+    </section>
+
+    <!-- ================= 2. NÚMEROS ================= -->
+    <!-- EDITAR: data-target = número final; data-prefix / data-suffix = texto antes/depois -->
+    <section class="numbers" id="numeros" aria-label="Números-chave">
+      <div class="container">
+        <ul class="numbers__grid">
+          <li class="stat glass" data-reveal>
+            <span class="stat__value"><span class="counter" data-target="25" data-suffix="+">25+</span></span>
+            <span class="stat__label">anos no setor elétrico</span>
+          </li>
+          <li class="stat glass" data-reveal>
+            <span class="stat__value"><span class="counter" data-target="10" data-suffix="+">10+</span></span>
+            <span class="stat__label">anos em gestão</span>
+          </li>
+          <li class="stat glass" data-reveal>
+            <span class="stat__value"><span class="counter" data-target="600" data-prefix="~" data-suffix=" mil">~600 mil</span></span>
+            <span class="stat__label">clientes atendidos na região</span>
+          </li>
+          <li class="stat glass" data-reveal>
+            <span class="stat__value"><span class="counter" data-target="43">43</span></span>
+            <span class="stat__label">municípios</span>
+          </li>
+          <li class="stat glass" data-reveal>
+            <span class="stat__value"><span class="counter" data-target="250" data-suffix="+">250+</span></span>
+            <span class="stat__label">colaboradores liderados</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= 3. SOBRE ================= -->
+    <section class="section section--light" id="sobre" aria-labelledby="sobre-title">
+      <div class="container about">
+        <div class="about__head" data-reveal>
+          <p class="eyebrow">Sobre</p>
+          <h2 id="sobre-title" class="section__title">Operação com rigor.<br>Decisão com dados.</h2>
+        </div>
+        <p class="about__text" data-reveal>
+          Executivo de operações com trajetória construída dentro da distribuição: Centro de Operações,
+          Gestão da Receita e Gerência Operacional. Combina rigor operacional com visão financeira,
+          usando dados e IA para reduzir perdas, elevar qualidade e desenvolver equipes de alta performance.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 4. TIMELINE ================= -->
+    <!-- EDITAR: ajuste os anos em <span class="tl__year"> -->
+    <section class="section section--dark" id="trajetoria" aria-labelledby="trajetoria-title">
+      <div class="container">
+        <div class="section__head" data-reveal>
+          <p class="eyebrow">Trajetória</p>
+          <h2 id="trajetoria-title" class="section__title">Carreira construída de dentro da operação</h2>
+        </div>
+        <div class="timeline">
+          <span class="timeline__line" aria-hidden="true"><span class="timeline__fill"></span></span>
+          <ol class="timeline__list">
+          <li class="tl" data-reveal>
+            <span class="tl__node" aria-hidden="true"></span>
+            <div class="tl__card glass">
+              <span class="tl__year">Início da carreira</span>
+              <h3 class="tl__title">Centro de Operações</h3>
+              <p>Base técnica na operação do sistema de distribuição em tempo real: manobras, contingências e restabelecimento.</p>
+            </div>
+          </li>
+          <li class="tl" data-reveal>
+            <span class="tl__node" aria-hidden="true"></span>
+            <div class="tl__card glass">
+              <span class="tl__year">Etapa seguinte</span>
+              <h3 class="tl__title">Gestão da Receita</h3>
+              <p>Combate a perdas não técnicas, recuperação de energia e uso de modelagem preditiva para priorizar ações por risco x retorno.</p>
+            </div>
+          </li>
+          <li class="tl" data-reveal>
+            <span class="tl__node" aria-hidden="true"></span>
+            <div class="tl__card glass">
+              <span class="tl__year">2021</span>
+              <h3 class="tl__title">Integração CEB/Neoenergia</h3>
+              <p>Transição cultural e operacional na integração de uma distribuidora: processos, indicadores e pessoas.</p>
+            </div>
+          </li>
+          <li class="tl" data-reveal>
+            <span class="tl__node" aria-hidden="true"></span>
+            <div class="tl__card glass">
+              <span class="tl__year">Atual</span>
+              <h3 class="tl__title">Gerente Operacional — Regional Centro Norte</h3>
+              <p>Gestão de equipes de campo, qualidade do fornecimento (DEC/FEC), OPEX e resultado operacional da regional.</p>
+            </div>
+          </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 5. CASES ================= -->
+    <!-- EDITAR: substitua os textos entre [colchetes] pelos resultados reais -->
+    <section class="section section--light" id="cases" aria-labelledby="cases-title">
+      <div class="container">
+        <div class="section__head" data-reveal>
+          <p class="eyebrow">Cases</p>
+          <h2 id="cases-title" class="section__title">Desafio → Ação → Resultado</h2>
+        </div>
+        <div class="cases">
+          <article class="case glass tilt" data-reveal>
+            <span class="case__tag">Transformação</span>
+            <h3 class="case__title">Integração de uma distribuidora</h3>
+            <dl class="case__dar">
+              <div><dt>Desafio</dt><dd>Unificar cultura, processos e indicadores após a integração de uma distribuidora.</dd></div>
+              <div><dt>Ação</dt><dd>Transição cultural e operacional com rituais de gestão, padronização e foco em pessoas.</dd></div>
+              <div><dt>Resultado</dt><dd class="case__result">[Descreva o resultado — ex.: indicadores estabilizados em X meses]</dd></div>
+            </dl>
+          </article>
+          <article class="case glass tilt" data-reveal>
+            <span class="case__tag">Dados &amp; IA</span>
+            <h3 class="case__title">Modelagem preditiva na recuperação de energia</h3>
+            <dl class="case__dar">
+              <div><dt>Desafio</dt><dd>Otimizar a relação risco x retorno nas inspeções de recuperação de energia.</dd></div>
+              <div><dt>Ação</dt><dd>Modelagem preditiva com SAP HANA + SAP PA, automatizando a modelagem estatística e a priorização de alvos.</dd></div>
+              <div><dt>Resultado</dt><dd class="case__result">[+X% de assertividade nas inspeções]</dd></div>
+            </dl>
+          </article>
+          <article class="case glass tilt" data-reveal>
+            <span class="case__tag">Qualidade</span>
+            <h3 class="case__title">Redução de perdas e melhoria de DEC/FEC</h3>
+            <dl class="case__dar">
+              <div><dt>Desafio</dt><dd>Reduzir perdas técnicas e não técnicas e elevar a continuidade do fornecimento.</dd></div>
+              <div><dt>Ação</dt><dd>Diagnóstico de rede orientado a dados, priorização de ativos críticos e gestão de compensações.</dd></div>
+              <div><dt>Resultado</dt><dd class="case__result">[−X% em perdas · −X% DEC · −X% FEC]</dd></div>
+            </dl>
+          </article>
+          <article class="case glass tilt" data-reveal>
+            <span class="case__tag">Pessoas</span>
+            <h3 class="case__title">Equipes autogerenciáveis e multiskill</h3>
+            <dl class="case__dar">
+              <div><dt>Desafio</dt><dd>Aumentar produtividade e autonomia das equipes de campo.</dd></div>
+              <div><dt>Ação</dt><dd>Modelo de equipes autogerenciáveis e multiskill, com capacitação cruzada e metas compartilhadas.</dd></div>
+              <div><dt>Resultado</dt><dd class="case__result">[+X% de produtividade das equipes]</dd></div>
+            </dl>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 6. EXPERTISE ================= -->
+    <section class="section section--dark" id="expertise" aria-labelledby="expertise-title">
+      <div class="container">
+        <div class="section__head" data-reveal>
+          <p class="eyebrow">Expertise</p>
+          <h2 id="expertise-title" class="section__title">Onde gero mais valor</h2>
+        </div>
+        <ul class="chips">
+          <li class="chip">Perdas técnicas e não técnicas</li>
+          <li class="chip">DEC/FEC</li>
+          <li class="chip">Gestão da receita</li>
+          <li class="chip">Excelência operacional</li>
+          <li class="chip">Gestão de OPEX</li>
+          <li class="chip">Liderança de equipes de campo</li>
+          <li class="chip">Dados e IA aplicados</li>
+          <li class="chip">Transformação organizacional</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= 7. CONTEÚDO ================= -->
+    <!-- EDITAR: troque título e href de cada post do LinkedIn -->
+    <section class="section section--light" id="conteudo-linkedin" aria-labelledby="conteudo-title">
+      <div class="container">
+        <div class="section__head" data-reveal>
+          <p class="eyebrow">Conteúdo</p>
+          <h2 id="conteudo-title" class="section__title">Publicações recentes</h2>
+        </div>
+        <div class="posts">
+          <a class="post glass" data-reveal href="https://www.linkedin.com/in/SEU-PERFIL/recent-activity/all/" target="_blank" rel="noopener">
+            <span class="post__meta">LinkedIn · Artigo</span>
+            <h3 class="post__title">Título do post 1</h3>
+            <span class="post__cta">Ler no LinkedIn <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+          </a>
+          <a class="post glass" data-reveal href="https://www.linkedin.com/in/SEU-PERFIL/recent-activity/all/" target="_blank" rel="noopener">
+            <span class="post__meta">LinkedIn · Artigo</span>
+            <h3 class="post__title">Título do post 2</h3>
+            <span class="post__cta">Ler no LinkedIn <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+          </a>
+          <a class="post glass" data-reveal href="https://www.linkedin.com/in/SEU-PERFIL/recent-activity/all/" target="_blank" rel="noopener">
+            <span class="post__meta">LinkedIn · Artigo</span>
+            <h3 class="post__title">Título do post 3</h3>
+            <span class="post__cta">Ler no LinkedIn <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 8. CONTATO ================= -->
+    <!-- EDITAR: URL do LinkedIn e e-mail -->
+    <section class="section section--dark contact" id="contato" aria-labelledby="contato-title">
+      <div class="container contact__inner" data-reveal>
+        <p class="eyebrow">Contato</p>
+        <h2 id="contato-title" class="section__title contact__title">Vamos conversar sobre<br>eficiência, receita e resultado?</h2>
+        <div class="contact__ctas">
+          <a class="btn btn--primary magnetic" href="https://www.linkedin.com/in/SEU-PERFIL" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-fill"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.75h4v11H3zM9.5 9.75h3.8v1.5h.06c.53-1 1.83-2.06 3.77-2.06 4.03 0 4.77 2.65 4.77 6.1v5.46h-4v-4.84c0-1.16-.02-2.64-1.61-2.64-1.61 0-1.86 1.26-1.86 2.56v4.92h-4z"/></svg>
+            <span>LinkedIn</span></a>
+          <a class="btn btn--ghost magnetic" href="mailto:seu-email@exemplo.com">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            <span>E-mail</span></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer__inner">
+      <p>© 2026 Madson Melo.</p>
+      <a href="#inicio">Voltar ao topo ↑</a>
+    </div>
+  </footer>
+</body>
+</html>

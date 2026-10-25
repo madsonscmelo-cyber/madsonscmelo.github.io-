@@ -9,6 +9,8 @@ import { AREA_CONCESSAO } from './seed.js';
 import { cartaoDefeito } from './ui.js';
 import { atribuirInspecao, distribuirAutomatico, ErroRegra } from './acoes.js';
 import { logar } from './auditoria.js';
+import { orcamentoDoMes, projecaoCarteira, mesDe } from './custos.js';
+import { CATEGORIAS } from './dominio.js';
 
 const pode = (...p) => p.includes(estado.usuario.perfil);
 const secao = (titulo, ...conteudo) => el('section', { class: 'bloco' }, el('h2', { text: titulo }), ...conteudo);
@@ -299,6 +301,7 @@ export function telaPainel(raiz, { abrirNoMapa }) {
         kpi('Defeitos abertos', fmtNum(ind.abertos), `A ${ind.porSev.A} · B ${ind.porSev.B} · C ${ind.porSev.C}`),
         kpi('Compensação exposta', fmtMoeda(ind.compExpostaMes), `/mês · ${ind.ativosExpostos} ativo(s) com defeito A/B aberto`),
         kpi('Compensação dos ativos críticos', fmtMoeda(ind.compCriticosMes), `/mês · ${ind.ativosCriticos} trafos/chaves reincidentes no plano`)))),
+    secaoCustos(),
     el('div', { class: 'grade-2' },
       secao('Evolução do plano (8 semanas)', graficoSemanas(ind.semanas)),
       secao('Aderência por critério', barras(ind.porCriterio.map((p) => ({ rotulo: p.criterio.nome, valor: p.devidas ? p.noPrazo / p.devidas : 1, classe: p.devidas && p.noPrazo / p.devidas < 0.9 ? 'alerta' : 'ok' })), { max: 1, formato: fmtPct })),
@@ -311,6 +314,23 @@ export function telaPainel(raiz, { abrirNoMapa }) {
     secao('Ranking das equipes (ponderado)', rankingTabelas(rk)),
     pode('GESTOR') ? secao('Trilha de auditoria (últimos 40 eventos)', tabela(['Quando', 'Usuário', 'Ação', 'Entidade'], d.auditoria.slice(0, 40).map((x) => [fmtDataHora(x.em), nomeUsuario(x.usuario), x.acao, `${x.entidade}${x.entidadeId ? ` ${x.entidadeId}` : ''}`]))) : null,
   );
+}
+
+/** Orçamento do mês e quanto custaria a carteira sem data (referência para decidir o que programar). */
+function secaoCustos() {
+  const mes = mesDe(hojeISO()), o = orcamentoDoMes(mes), proj = projecaoCarteira();
+  const linhas = o.linhas.map((l) => {
+    const p = proj.find((x) => x.categoria === l.categoria);
+    return [CATEGORIAS[l.categoria], fmtMoeda(l.orcado), fmtMoeda(l.realizado), fmtMoeda(l.comprometido), fmtMoeda(l.saldo), `${fmtMoeda(p.valor)} (${p.qtd})`, p.criticos ? `${fmtMoeda(p.valorCriticos)} (${p.criticos})` : '—'];
+  });
+  linhas.push(['Total', fmtMoeda(o.total.orcado), fmtMoeda(o.total.realizado), fmtMoeda(o.total.comprometido), fmtMoeda(o.total.saldo),
+    fmtMoeda(proj.reduce((t, p) => t + p.valor, 0)), fmtMoeda(proj.reduce((t, p) => t + p.valorCriticos, 0))]);
+  const caberia = o.total.saldo >= proj.reduce((t, p) => t + p.valorCriticos, 0);
+  return secao(`Custo e orçamento — ${new Date(`${mes}-15T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
+    tabela(['Categoria', 'Orçado', 'Realizado', 'Programado', 'Saldo', 'Carteira sem data', 'Só críticos (A)'], linhas),
+    el('p', { class: `geo ${caberia ? 'geo--ok' : 'geo--alerta'}`, text: caberia
+      ? 'O saldo do mês cobre todos os defeitos críticos ainda sem data.'
+      : `O saldo do mês (${fmtMoeda(o.total.saldo)}) não cobre os críticos sem data — priorize na Programação ou revise o orçamento.` }));
 }
 
 function rankingTabelas(rk, destaque) {

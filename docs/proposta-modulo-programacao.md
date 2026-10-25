@@ -235,6 +235,8 @@ Tudo o que é regra vira parâmetro, com tela de administração, **vigência** 
 
 ## 11. Implementação proposta [SUPOSIÇÃO de prazo]
 
+> **Situação em 25/10/2026:** etapas **1** (parâmetros com vigência + Administrador), **4** (tela Programação) e **6** (caderno, composições, custo-padrão/realizado, orçamento × realizado) **entregues** no protótipo. Próximas: 2, 3 e 5.
+
 | Etapa | Entrega | Duração |
 |---|---|---|
 | 1 | Administração de parâmetros com vigência + perfil Administrador | 1 semana |

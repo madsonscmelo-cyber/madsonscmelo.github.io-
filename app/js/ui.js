@@ -11,11 +11,12 @@ import { el, $, toast, fmtData, fmtMoeda, fmtNum, diasEntre, hojeISO, distanciaM
 import { estado, ativoPorId, equipeDoUsuario, nomeEquipe, nomeUsuario, salvarRascunho, removerRascunho, obterRascunho } from './store.js';
 import {
   TIPOS_ATIVO, criterio, CONJUNTOS, tipoDefeito, tiposDefeitoPara, SEVERIDADES, STATUS_DEFEITO, CATEGORIAS,
-  STATUS_ABERTOS, TIPOS_EQUIPE, scoreRisco, faixaRisco, estadoAtivo, podeTransicionar, equipesAptas, RAIO_VALIDACAO_M,
+  STATUS_ABERTOS, TIPOS_EQUIPE, scoreRisco, faixaRisco, estadoAtivo, podeTransicionar, equipesAptas, PARAM,
 } from './dominio.js';
 import { concluirInspecao, transicionar, atribuirInspecao, ErroRegra } from './acoes.js';
 import { campoFotos, galeria } from './fotos.js';
 import { logar } from './auditoria.js';
+import { custoDefeito } from './custos.js';
 
 // ---------- Sheet (com integração ao botão "voltar" do celular) ----------
 let atual = null; // { tipo: 'ativo'|'area'|'form', id }
@@ -64,7 +65,7 @@ export function validarGeo(alvos) {
   const p = estado.posicao;
   if (!p) return { temPosicao: false, dentroDoRaio: false, distanciaM: null };
   const dist = Math.min(...alvos.map((a) => distanciaM(p.lat, p.lon, a.lat, a.lon)));
-  return { temPosicao: true, dentroDoRaio: dist <= RAIO_VALIDACAO_M, distanciaM: Math.round(dist), simulada: !!p.simulada, lat: p.lat, lon: p.lon };
+  return { temPosicao: true, dentroDoRaio: dist <= PARAM.raioValidacaoM, distanciaM: Math.round(dist), simulada: !!p.simulada, lat: p.lat, lon: p.lon };
 }
 
 function blocoGeo(alvos, exigeJustificativa, { justificativa = '', aoMudar = () => {} } = {}) {
@@ -80,7 +81,7 @@ function blocoGeo(alvos, exigeJustificativa, { justificativa = '', aoMudar = () 
       ? '📍 Sem posição: ative o GPS ou simule a posição no mapa.'
       : g.dentroDoRaio
         ? `✓ Posição validada: ${g.distanciaM} m do ativo${g.simulada ? ' (simulada)' : ''}.`
-        : `⚠ Você está a ${g.distanciaM} m do ativo (limite ${RAIO_VALIDACAO_M} m).`;
+        : `⚠ Você está a ${g.distanciaM} m do ativo (limite ${PARAM.raioValidacaoM} m).`;
     wrapJust.hidden = g.dentroDoRaio && !exigeJustificativa;
     return g;
   };
@@ -145,8 +146,11 @@ export function cartaoDefeito(f, { comAtivo = false, aoAbrirAtivo } = {}) {
       chip(STATUS_DEFEITO[f.status], `chip--st-${f.status.toLowerCase()}`)),
   );
   if (f.descricao) card.append(el('p', { class: 'card-def__desc', text: f.descricao }));
-  const info = [`Exige: ${td?.equipes.map((t) => TIPOS_EQUIPE[t]).join(' / ')}`];
-  if (f.equipeId) info.push(`Programado: ${nomeEquipe(f.equipeId)}`);
+  const custo = f.execucao?.custo || custoDefeito(f);
+  const info = [`Exige: ${td?.equipes.map((t) => TIPOS_EQUIPE[t]).join(' / ')}`,
+    `${f.execucao?.custo ? 'Custo realizado' : 'Custo estimado'} ${fmtMoeda(custo.total)}${custo.unidade && custo.unidade !== 'un' ? ` (${custo.quantidade} ${custo.unidade})` : ''}`];
+  if (f.programacao && f.status === 'PROGRAMADO') info.push(`Programado: ${fmtData(f.programacao.data)} · ${nomeEquipe(f.programacao.equipeId)}`);
+  else if (f.equipeId) info.push(`Equipe: ${nomeEquipe(f.equipeId)}`);
   if (f.execucao) info.push(`Executado por ${nomeEquipe(f.execucao.equipeId)}${f.execucao.naHora ? ' (na hora)' : ''}`);
   card.append(el('div', { class: 'muted pequeno', text: info.join(' · ') }));
 
@@ -170,10 +174,10 @@ export function cartaoDefeito(f, { comAtivo = false, aoAbrirAtivo } = {}) {
     const sev = selectDe(Object.entries(SEVERIDADES), f.severidade, { 'aria-label': 'Severidade' });
     acoes.append(sev, el('button', { type: 'button', class: 'btn', text: 'Validar', onclick: () => exec('VALIDADO', { severidade: sev.value }) }));
   }
-  if (podeTransicionar(u, f, 'PROGRAMADO') && f.status !== 'EXECUTADO') {
+  if (podeTransicionar(u, f, 'PROGRAMADO') && f.status === 'VALIDADO') {
     const aptas = equipesAptas(d, f);
     const sel = selectDe(aptas.map((e) => [e.id, `${e.nome}${e.disponivel ? '' : ' (indisponível)'}`]), f.equipeId || aptas.find((e) => e.disponivel)?.id, { 'aria-label': 'Equipe' });
-    acoes.append(sel, el('button', { type: 'button', class: f.status === 'PROGRAMADO' ? 'btn btn--sec' : 'btn', text: f.status === 'PROGRAMADO' ? 'Reprogramar' : 'Programar', onclick: () => exec('PROGRAMADO', { equipeId: sel.value }) }));
+    acoes.append(sel, el('button', { type: 'button', class: 'btn', text: 'Programar (próximo dia útil)', onclick: () => exec('PROGRAMADO', { equipeId: sel.value }) }));
   }
   if (podeTransicionar(u, f, 'EXECUTADO')) acoes.append(el('button', { type: 'button', class: 'btn', text: 'Registrar execução', onclick: () => abrirExecucao(f) }));
   if (podeTransicionar(u, f, 'VERIFICADO')) acoes.append(el('button', { type: 'button', class: 'btn btn--ok', text: 'Verificar e fechar', onclick: () => exec('VERIFICADO') }));
@@ -269,7 +273,7 @@ const CHECKLIST = {
   CHAVE_FUSIVEL: ['Porta-fusível e elo adequado', 'Contatos sem oxidação', 'Isoladores', 'Fixação na cruzeta'],
 };
 const ETAPAS = ['Checklist', 'Defeitos', 'Evidência'];
-const CATEGORIA_ICONE = { ESTRUTURAL: '🏗', VEGETACAO: '🌳', ELETRICO: '⚡', FAUNA: '🐦' };
+const CATEGORIA_ICONE = { ESTRUTURAL: '🏗', VEGETACAO: '🌳', ROCADA: '🌾', ELETRICO: '⚡', FAUNA: '🐦' };
 
 export function retomarRascunho(r) {
   const ativos = r.ativoIds.map(ativoPorId).filter(Boolean);
@@ -363,6 +367,9 @@ export function abrirFormInspecao({ ativos, inspecoes, avulsa = false }) {
     const wrapRes = el('label', { class: 'campo campo--check' }, resolvido, el('span', { text: 'Resolvido na hora (manutenção feita nesta visita)' }));
     const wrapAtiv = el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Atividade realizada' }), ativ);
     const exige = el('div', { class: 'pequeno muted' });
+    const qtd = el('input', { type: 'number', class: 'campo__input', min: 1, step: 1, inputmode: 'numeric' });
+    const qtdRot = el('span', { class: 'campo__rotulo' });
+    const wrapQtd = el('label', { class: 'campo' }, qtdRot, qtd);
     const fotos = campoFotos({ rotulo: () => `Defeito · ${ativoPorId(selAtivo.value).codigo}`, minimo: 1, titulo: 'Foto do defeito' });
     const sincronizar = () => {
       const td = tipoDefeito(selTipo.value);
@@ -373,6 +380,10 @@ export function abrirFormInspecao({ ativos, inspecoes, avulsa = false }) {
       if (!podeResolver) resolvido.checked = false;
       ativ.value = td.atividade;
       wrapAtiv.hidden = !resolvido.checked;
+      const medido = td.unidade && td.unidade !== 'un';
+      wrapQtd.hidden = !medido;
+      qtdRot.textContent = `Extensão (${td.unidade === 'm' ? 'metros' : td.unidade === 'vão' ? 'vãos' : td.unidade})`;
+      qtd.value = td.quantidadePadrao || 1;
     };
     selAtivo.addEventListener('change', () => { selTipo.recarregar(ativoPorId(selAtivo.value).tipo); sincronizar(); });
     selTipo.addEventListener('change', sincronizar);
@@ -383,13 +394,14 @@ export function abrirFormInspecao({ ativos, inspecoes, avulsa = false }) {
       el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Tipo de defeito' }), selTipo),
       exige,
       el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Severidade' }), selSev),
+      wrapQtd,
       fotos.elemento,
       el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Descrição' }), desc),
       wrapRes, wrapAtiv,
       el('div', { class: 'linha' },
         el('button', { type: 'button', class: 'btn', text: 'Adicionar defeito', onclick: () => {
           if (!fotos.suficiente()) { toast('Inclua ao menos uma foto do defeito.', { tipo: 'erro' }); return; }
-          r.defeitos.push({ ativoId: selAtivo.value, tipoId: selTipo.value, severidade: selSev.value, descricao: desc.value.trim(), fotos: fotos.fotos(), resolvido: resolvido.checked, atividade: ativ.value.trim() });
+          r.defeitos.push({ ativoId: selAtivo.value, tipoId: selTipo.value, severidade: selSev.value, descricao: desc.value.trim(), fotos: fotos.fotos(), resolvido: resolvido.checked, atividade: ativ.value.trim(), quantidade: wrapQtd.hidden ? undefined : Math.max(1, Number(qtd.value) || 1) });
           aoAdicionar();
         } }),
         el('button', { type: 'button', class: 'btn btn--txt', text: 'Cancelar', onclick: aoCancelar })));
@@ -433,6 +445,8 @@ export function abrirExecucao(f) {
   const corpo = el('div', { class: 'form' });
   const ativ = el('input', { class: 'campo__input', value: td.atividade, maxlength: 120 });
   const mat = el('textarea', { class: 'campo__input', rows: 2, maxlength: 300, placeholder: 'Ex.: 1 cruzeta 2,4 m, 2 isoladores pino' });
+  const medido = td.unidade && td.unidade !== 'un';
+  const qtdExec = el('input', { type: 'number', class: 'campo__input', min: 1, step: 1, value: f.quantidade || td.quantidadePadrao || 1 });
   const fotos = campoFotos({ rotulo: () => `Execução · ${a.codigo}`, minimo: 1, titulo: 'Foto depois do serviço' });
   const geo = blocoGeo([a], false);
   corpo.append(
@@ -440,12 +454,13 @@ export function abrirExecucao(f) {
     el('details', { class: 'bloco-det' }, el('summary', { text: 'Ver foto de identificação (antes)' }), galeria(f.fotos)),
     fotos.elemento,
     el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Atividade realizada' }), ativ),
+    medido ? el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: `Extensão executada (${td.unidade === 'm' ? 'metros' : 'vãos'})` }), qtdExec) : null,
     el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Materiais aplicados' }), mat),
     geo.elemento);
   const salvar = () => {
     const g = geo.geo();
     if (!g.dentroDoRaio && !geo.justificativa().trim()) { toast('Fora do raio: informe a justificativa.', { tipo: 'erro' }); return; }
-    if (tratar(() => transicionar(f, 'EXECUTADO', { atividade: ativ.value.trim(), materiais: mat.value.trim(), fotos: fotos.fotos(), geo: g, justificativa: g.dentroDoRaio ? undefined : geo.justificativa() }))) {
+    if (tratar(() => transicionar(f, 'EXECUTADO', { atividade: ativ.value.trim(), materiais: mat.value.trim(), quantidade: medido ? Math.max(1, Number(qtdExec.value) || 1) : undefined, fotos: fotos.fotos(), geo: g, justificativa: g.dentroDoRaio ? undefined : geo.justificativa() }))) {
       toast('Execução registrada. Aguarda verificação do supervisor.', { tipo: 'ok' });
       abrirAtivo(a.id);
     }

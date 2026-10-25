@@ -48,6 +48,13 @@ function registrar(id, nome, passou, evidencia) {
     }
     await p.waitForTimeout(300);
   };
+  /** Navega pela barra inferior; telas extras ficam no menu "Mais". */
+  const irPara = async (p, tela) => {
+    const b = p.locator(`#nav > .nav__btn[data-view=${tela}]`);
+    if (await b.count()) await b.click();
+    else { await p.click('#nav-mais-btn'); await p.click(`#nav-mais .nav__btn[data-view=${tela}]`); }
+    await p.waitForTimeout(250);
+  };
   const ultimoToast = async (p) => (await p.locator('.toast').allInnerTexts()).at(-1) || '';
 
   try {
@@ -58,7 +65,7 @@ function registrar(id, nome, passou, evidencia) {
     await p.goto(BASE);
     await entrar(p, 'Gestão de Planejamento');
 
-    await p.click('.nav__btn[data-view=plano]');
+    await irPara(p, 'plano');
     await p.setInputFiles('#view-plano input[type=file]', CSV);
     await p.waitForTimeout(400);
     const rel = await p.locator('#view-plano .bloco').first().innerText();
@@ -117,12 +124,13 @@ function registrar(id, nome, passou, evidencia) {
       novos.map((x) => `${x.tipoId}:${x.status}`).join(', '));
 
     await entrar(p, 'Supervisão de Campo');
-    await p.click('.nav__btn[data-view=defeitos]');
+    await irPara(p, 'defeitos');
     const card = () => p.locator(`.card-def:has-text("${alvo.codigo}"):has-text("Vazamento")`).first();
     await card().locator('button:has-text("Validar")').click();
     await card().locator('button:has-text("Programar")').click();
+    await p.waitForTimeout(300);
     await entrar(p, 'Equipe Turma Pesada 01');
-    await p.click('.nav__btn[data-view=defeitos]');
+    await irPara(p, 'defeitos');
     await card().locator('button:has-text("Registrar execução")').click();
     await p.setInputFiles('#sheet input[type=file]', FOTO);
     await p.waitForTimeout(500);
@@ -133,7 +141,7 @@ function registrar(id, nome, passou, evidencia) {
     await p.waitForTimeout(300);
     registrar('RF-INS-07', 'Execução fora do raio/sem GPS exige justificativa', /justificativa/i.test(bloqueio), bloqueio);
     await entrar(p, 'Supervisão de Campo');
-    await p.click('.nav__btn[data-view=defeitos]');
+    await irPara(p, 'defeitos');
     await p.click('.abas__btn:has-text("A verificar")');
     await card().locator('button:has-text("Verificar e fechar")').click();
     await p.waitForTimeout(300);
@@ -162,7 +170,7 @@ function registrar(id, nome, passou, evidencia) {
     // ================= Fase 8 — offline =================
     await entrar(p, 'Supervisão de Campo');
     await p.click('#btn-usuario'); await p.click('text=Simular modo offline');
-    await p.click('.nav__btn[data-view=plano]');
+    await irPara(p, 'plano');
     await p.click('text=Distribuir pendentes automaticamente');
     await p.waitForTimeout(800);
     const fila = await p.locator('#st-sync').innerText();
@@ -230,7 +238,7 @@ function registrar(id, nome, passou, evidencia) {
 
     // Gestor bloqueia um usuário → login dele é recusado; auditor só lê
     await entrar(pa, 'Gestão de Planejamento');
-    await pa.click('.nav__btn[data-view=acesso]');
+    await irPara(pa, 'acesso');
     await pa.click('.abas__btn:has-text("Usuários")');
     await pa.locator('tr:has-text("POD01") button:has-text("Bloquear")').click();
     await pa.waitForTimeout(300);
@@ -264,6 +272,67 @@ function registrar(id, nome, passou, evidencia) {
     });
     registrar('LOG-3', 'Cadeia de hash detecta registro adulterado', integ.ok && !adulterado.ok, `antes: íntegro (${integ.total}) · depois de alterar o registro 3: ${adulterado.motivo}`);
     await ca.close();
+
+    // ================= Parâmetros, custos e programação =================
+    const cp = await browser.newContext({ viewport: { width: 1366, height: 900 }, serviceWorkers: 'block' });
+    const pp = await cp.newPage();
+    vigiar(pp);
+    pp.on('dialog', (d) => d.accept());
+    await pp.goto(BASE);
+    await entrar(pp, 'X1001');
+    const resParam = await pp.evaluate(async () => {
+      const P = await import('./js/parametros.js'); const { PARAM } = await import('./js/dominio.js'); const { hojeISO } = await import('./js/util.js');
+      const out = {};
+      try { P.salvarVersao('geral', { ...P.valor('geral'), raioValidacaoM: 80 }, '2020-01-01', 'teste'); out.passado = 'ACEITO'; } catch (e) { out.passado = e.message; }
+      try { P.salvarVersao('geral', { ...P.valor('geral'), raioValidacaoM: 1 }, hojeISO(), 'teste'); out.limite = 'ACEITO'; } catch (e) { out.limite = e.message; }
+      P.salvarVersao('geral', { ...P.valor('geral'), raioValidacaoM: 80 }, hojeISO(), 'Ajuste para área rural');
+      out.aplicado = PARAM.raioValidacaoM;
+      // Orçamento de Estrutural do mês atual reduzido para forçar o aviso de estouro
+      const mes = hojeISO().slice(0, 7);
+      const orc = P.valor('orcamento').map((o) => (o.mes === mes && o.categoria === 'ESTRUTURAL' ? { ...o, valor: 100 } : o));
+      P.salvarVersao('orcamento', orc, hojeISO(), 'Teste de estouro');
+      out.versoes = P.versoes('geral').length + P.versoes('orcamento').length;
+      return out;
+    });
+    registrar('PARAM-1', 'Parâmetro novo vale na hora; vigência no passado e valor fora do limite são recusados', /passado/.test(resParam.passado) && /mínimo/.test(resParam.limite) && resParam.aplicado === 80,
+      `passado: "${resParam.passado}" · limite: "${resParam.limite}" · raio em vigor ${resParam.aplicado} m`);
+
+    await entrar(pp, 'Gestão de Planejamento');
+    const gestorCaderno = await pp.evaluate(async () => { const P = await import('./js/parametros.js'); try { P.salvarVersao('caderno', P.valor('caderno'), (await import('./js/util.js')).hojeISO(), 'x'); return 'PERMITIDO'; } catch (e) { return e.message; } });
+    registrar('PARAM-2', 'Gestor edita orçamento, mas caderno de preços só o Administrador', /não pode alterar/.test(gestorCaderno), gestorCaderno);
+
+    const custo = await pp.evaluate(async () => {
+      const { custoDefeito } = await import('./js/custos.js'); const { estado } = await import('./js/store.js');
+      const a = estado.dados.ativos.find((x) => x.conjunto === 'CJ-Sul');
+      return custoDefeito({ tipoId: 'PODA', ativoId: a.id, quantidade: 4 });
+    });
+    registrar('CUSTO-1', 'Custo-padrão = caderno × composição × extensão × fator regional', Math.abs(custo.total - (4 * 180 + 150) * 1.15) < 0.01,
+      `Poda de 4 vãos no CJ-Sul: (4 × R$ 180 + R$ 150 deslocamento) × 1,15 = R$ ${custo.total.toFixed(2)}`);
+
+    await entrar(pp, 'Supervisão de Campo');
+    await irPara(pp, 'programacao');
+    const alvoProg = await pp.locator('.item-carteira').filter({ hasText: /Cruzeta|Poste|Estai/ }).first();
+    const nomeAlvo = (await alvoProg.locator('strong').first().innerText());
+    const codAlvo = (await alvoProg.locator('.muted.pequeno').first().innerText()).split(' · ')[0];
+    await alvoProg.locator('button:has-text("Programar")').click();
+    await pp.waitForTimeout(400);
+    const logsProg = await pp.evaluate(async () => (await (await import('./js/auditoria.js')).todosLogs()).map((l) => l.acao));
+    registrar('PROG-1', 'Programar acima do orçamento pede confirmação e fica registrado', logsProg.includes('ORCAMENTO_EXCEDIDO_CIENTE') && logsProg.includes('DEFEITO_PROGRAMADO'), `${nomeAlvo} em ${codAlvo}`);
+    const quadroTem = await pp.locator('.ativ', { hasText: codAlvo }).count();
+    await pp.click('button:has-text("Congelar programação da semana")');
+    await pp.waitForTimeout(300);
+    await pp.locator('.ativ', { hasText: codAlvo }).first().click();
+    const amanha = await pp.evaluate(async () => { const u = await import('./js/util.js'); return u.proximoDiaUtil(u.proximoDiaUtil()); });
+    await pp.fill('#sheet input[type=date]', amanha);
+    await pp.click('#sheet-rodape button:has-text("Salvar reprogramação")');
+    const semMotivo = await ultimoToast(pp);
+    await pp.selectOption('#sheet select >> nth=1', { index: 4 });
+    await pp.click('#sheet-rodape button:has-text("Salvar reprogramação")');
+    await pp.waitForTimeout(300);
+    const repr = await pp.evaluate(async (cod) => { const { estado } = await import('./js/store.js'); const a = estado.dados.ativos.find((x) => x.codigo === cod); const f = estado.dados.defeitos.find((x) => x.ativoId === a.id && x.status === 'PROGRAMADO'); return f.reprogramacoes?.at(-1); }, codAlvo);
+    registrar('PROG-2', 'Semana congelada: reprogramar exige motivo e o motivo fica gravado', quadroTem > 0 && /motivo/.test(semMotivo) && repr?.motivo && repr.congelada, `sem motivo: "${semMotivo}" · gravado: ${repr?.motivo} (${repr?.de.data} → ${repr?.para.data})`);
+    await pp.screenshot({ path: path.join(SAIDA, 'programacao.png'), fullPage: true });
+    await cp.close();
 
     // ================= Trabalho offline por alimentador =================
     const ctxo = await browser.newContext({ viewport: { width: 1280, height: 820 } });
@@ -382,19 +451,21 @@ function registrar(id, nome, passou, evidencia) {
     await m.goBack();
     await m.waitForTimeout(300);
     registrar('8.9', 'Botão voltar do celular fecha o painel sem sair do app', await m.locator('#sheet').isHidden() && m.url().includes('/app/'), m.url());
-    await m.click('.nav__btn[data-view=defeitos]'); await medir('defeitos');
-    await m.click('.nav__btn[data-view=producao]'); await medir('producao');
+    await irPara(m, 'defeitos'); await medir('defeitos');
+    await irPara(m, 'producao'); await medir('producao');
     await entrar(m, 'Gestão de Planejamento');
-    await m.click('.nav__btn[data-view=painel]'); await medir('painel');
-    await m.click('.nav__btn[data-view=plano]'); await medir('plano');
-    await m.click('.nav__btn[data-view=acesso]'); await m.waitForTimeout(500); await medir('acesso');
-    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '13 telas verificadas');
+    await irPara(m, 'painel'); await medir('painel');
+    await irPara(m, 'plano'); await medir('plano');
+    await irPara(m, 'acesso'); await m.waitForTimeout(500); await medir('acesso');
+    await irPara(m, 'programacao'); await m.waitForTimeout(400); await medir('programacao');
+    await irPara(m, 'parametros'); await m.waitForTimeout(400); await medir('parametros');
+    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '15 telas verificadas');
     registrar('8.2', 'Alvos de toque ≥ 48 px', !pequenos.length, pequenos.length ? `${pequenos.length} abaixo: ${pequenos.slice(0, 6).join('; ')}` : 'todos os controles visíveis ≥ 48 px');
     await ctx3.close();
 
     registrar('6.x', 'Sem erros de JavaScript nem violações de CSP no console', !erros.length, erros.slice(0, 3).join(' | ') || 'console limpo');
   } catch (e) {
-    registrar('E2E', 'Execução do roteiro', false, e.message.split('\n')[0]);
+    registrar("E2E", "Execução do roteiro", false, e.message.split("\n").slice(0, 6).join(" | "));
   } finally {
     await browser.close();
     srv.close();

@@ -39,10 +39,27 @@ No celular, a instalação como app (PWA) exige HTTPS — por exemplo, publicand
 ## Login e logs
 
 - Entrar com **matrícula + senha**. Senha inicial de demonstração: `Rede@2026` (o app obriga a criar uma senha pessoal no primeiro acesso).
-- Matrículas: `G1001` gestor · `S1001` supervisor · `A1001` auditoria · equipes `INS01`, `INS02`, `LEV01`, `LEV02`, `PES01`, `LV01`, `POD01`.
+- Matrículas: `G1001` gestor · `S1001` supervisor · `A1001` auditoria · `X1001` administrador · equipes `INS01`, `INS02`, `LEV01`, `LEV02`, `PES01`, `LV01`, `POD01`, `ROC01`.
 - Política: senha ≥ 10 caracteres com 3 de 4 tipos, sem matrícula/nome, sem repetir as 3 últimas; 5 erros bloqueiam por 15 min; bloqueio após 20 min parado; sessão máxima de 10 h.
 - **Tudo é registrado**: tela **🔐 Acesso** (gestor e auditoria) mostra o log com filtros, exportação, verificação de integridade (cadeia SHA-256) e a gestão de usuários (bloquear, redefinir senha, liberar tentativas).
 - Limite do protótipo: login e logs ficam no aparelho. Em produção: SSO corporativo com MFA e logs enviados a servidor só de inclusão/SIEM.
+
+## Programação, custos e orçamento
+
+- **🗓️ Programação** (gestor e supervisor; auditoria consulta):
+  - carteira de defeitos validados por risco, com **custo-padrão** e horas de cada um;
+  - quadro da semana por equipe e dia, com ocupação (horas) e custo;
+  - **orçamento do mês por categoria** (Estrutural, Poda, Roçada, Elétrico, Fauna): orçado, realizado, programado e saldo. Programar algo que estoura o saldo pede confirmação e fica no log;
+  - **congelar a semana**: depois disso, mudar data ou equipe exige motivo; a aderência mede o que foi executado conforme o congelado; Pareto dos motivos;
+  - prazo dos críticos (defeito A executado em até N dias) e valor da carteira ainda sem data.
+- **Custo-padrão** = itens do caderno de serviços × quantidade da composição × extensão (vãos de poda, metros de roçada) × fator regional do conjunto. Na execução o custo é gravado com os preços do dia (custo realizado).
+- **Painel**: bloco "Custo e orçamento" com saldo do mês e quanto custaria a carteira sem data (só críticos e total).
+
+## Parâmetros (⚙️)
+
+Tudo que é regra é editável, com **data de início de vigência**, motivo e histórico; nada é recalculado para trás:
+orçamento mensal, caderno de serviços (com importação CSV), composições de custo, fator regional, tipos de defeito, critérios de inspeção, motivos de reprogramação, metas e prazos, campo e programação, pesos do risco, pontuação do ranking e política de acesso (com limites mínimos protegidos).
+O **Administrador** (`X1001`) edita tudo; o **gestor** edita orçamento, metas e motivos; auditoria consulta. Toda alteração vai para o log.
 
 ## Trabalho offline por alimentador
 
@@ -67,7 +84,7 @@ destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (M
 bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e
 ```
-Resultado atual: 33/33 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+Resultado atual: 38/38 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
 
 ## Roteiro de demonstração (cenário §14 da especificação)
 

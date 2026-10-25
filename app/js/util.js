@@ -145,3 +145,27 @@ export async function sha256(blob) {
   const buf = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+// ---------- Semanas (ISO 8601: começa na segunda) ----------
+export function semanaISO(iso) {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  const dia = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dia + 3);
+  const ano = d.getFullYear();
+  const primeira = new Date(`${ano}-01-04T12:00:00`);
+  const n = 1 + Math.round(((d - primeira) / 86400000 - 3 + ((primeira.getDay() + 6) % 7)) / 7);
+  return `${ano}-W${String(n).padStart(2, '0')}`;
+}
+export function diasDaSemana(semana) {
+  const [ano, w] = semana.split('-W').map(Number);
+  const jan4 = new Date(`${ano}-01-04T12:00:00`);
+  const seg = new Date(jan4);
+  seg.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (w - 1) * 7);
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(seg); d.setDate(seg.getDate() + i); return dataISO(d); });
+}
+export const deslocarSemana = (semana, n) => semanaISO(somarDias(diasDaSemana(semana)[0], 7 * n));
+export function proximoDiaUtil(iso = hojeISO()) {
+  let d = somarDias(iso, 1);
+  while ([0, 6].includes(new Date(`${d}T12:00:00`).getDay())) d = somarDias(d, 1);
+  return d;
+}

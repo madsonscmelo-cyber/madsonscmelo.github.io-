@@ -1,8 +1,8 @@
 // Dados 100% sintéticos para o protótipo. Nenhum ativo, código ou valor corresponde à rede real.
-import { mulberry32, deslocar, distanciaM, hojeISO, somarDias, uid } from './util.js';
+import { mulberry32, deslocar, distanciaM, hojeISO, somarDias, uid, semanaISO, proximoDiaUtil } from './util.js';
 import { CRITERIOS, tiposDefeitoPara, gerarInspecoesDevidas } from './dominio.js';
 
-export const VERSAO_SCHEMA = 4;
+export const VERSAO_SCHEMA = 5;
 
 const SE = [-15.8405, -48.0760]; // subestação fictícia
 const ROTAS = {
@@ -38,12 +38,14 @@ export function gerarSeed() {
     { id: 'PES-01', nome: 'Turma Pesada 01', tipo: 'PESADA', base: 'Base Oeste', disponivel: true },
     { id: 'LV-01', nome: 'Linha Viva 01', tipo: 'LINHA_VIVA', base: 'Base Oeste', disponivel: true },
     { id: 'POD-01', nome: 'Poda 01', tipo: 'PODA', base: 'Base Sul', disponivel: true },
+    { id: 'ROC-01', nome: 'Roçada 01', tipo: 'ROCADA', base: 'Base Sul', disponivel: true },
   ];
   // Senha inicial de demonstração (POLITICA.senhaInicialDemo) com troca obrigatória no primeiro acesso.
   const usuarios = [
     { id: 'u-gestor', matricula: 'G1001', nome: 'Gestão de Planejamento', perfil: 'GESTOR' },
     { id: 'u-sup', matricula: 'S1001', nome: 'Supervisão de Campo', perfil: 'SUPERVISOR' },
     { id: 'u-auditor', matricula: 'A1001', nome: 'Auditoria Interna', perfil: 'AUDITOR' },
+    { id: 'u-admin', matricula: 'X1001', nome: 'Administração do Sistema', perfil: 'ADMIN' },
     ...equipes.map((e) => ({ id: `u-${e.id}`, matricula: e.id.replace('-', ''), nome: `Equipe ${e.nome}`, perfil: 'EQUIPE', equipeId: e.id })),
   ].map((u) => ({ ...u, ativo: true, credencial: null, trocarSenha: true }));
 
@@ -110,34 +112,55 @@ export function gerarSeed() {
   const defeitos = [];
   const comCriterio = ativos.filter((a) => a.criterios.length);
   const distribuicao = [
-    ...Array(6).fill('IDENTIFICADO'), ...Array(6).fill('VALIDADO'), ...Array(5).fill('PROGRAMADO'),
-    ...Array(2).fill('EXECUTADO'), ...Array(4).fill('VERIFICADO'),
+    ...Array(5).fill('IDENTIFICADO'), ...Array(9).fill('VALIDADO'), ...Array(6).fill('PROGRAMADO'),
+    ...Array(3).fill('EXECUTADO'), ...Array(6).fill('VERIFICADO'),
   ];
   const usados = new Set();
+  let nProg = 0, nAtual = 0;
   for (const status of distribuicao) {
     let a;
     do { a = escolher(comCriterio); } while (usados.has(a.id));
     usados.add(a.id);
     const td = escolher(tiposDefeitoPara(a.tipo));
-    const criado = somarDias(hoje, -inteiro(status === 'VERIFICADO' ? 30 : 1, status === 'VERIFICADO' ? 60 : 40));
+    const [ini, fim] = { VERIFICADO: [30, 60], EXECUTADO: [15, 40] }[status] || [1, 40];
+    const criado = somarDias(hoje, -inteiro(ini, fim));
     const equipeIdent = escolher(inspetores).id;
     const d = {
       id: uid('def'), ativoId: a.id, inspecaoId: null, tipoId: td.id, severidade: td.severidade, status,
       descricao: `${td.nome} (registro sintético)`, lat: a.lat, lon: a.lon, criadoEm: `${criado}T13:00:00.000Z`,
       criadoPor: `u-${equipeIdent}`, identificadoPorEquipe: equipeIdent, fotos: [], sintetico: true,
       equipeId: null, historico: [{ status: 'IDENTIFICADO', em: `${criado}T13:00:00.000Z`, por: `u-${equipeIdent}` }],
+      ...(td.unidade && td.unidade !== 'un' ? { quantidade: td.unidade === 'm' ? inteiro(8, 30) * 10 : inteiro(1, 6) } : {}),
     };
     const passos = ['VALIDADO', 'PROGRAMADO', 'EXECUTADO', 'VERIFICADO'];
     const alvo = passos.indexOf(status);
     const exec = equipes.find((e) => td.equipes.includes(e.tipo) && e.tipo !== 'INSPECAO') || equipes[2];
     for (let k = 0; k <= alvo; k++) {
-      const em = `${somarDias(criado, (k + 1) * 3)}T15:00:00.000Z`;
+      const passo = somarDias(criado, (k + 1) * 3);
+      const em = `${passo > hoje ? hoje : passo}T15:00:00.000Z`; // nada no futuro
       if (passos[k] === 'PROGRAMADO') d.equipeId = exec.id;
-      if (passos[k] === 'EXECUTADO') d.execucao = { equipeId: exec.id, atividade: td.atividade, em, por: `u-${exec.id}`, fotos: [] };
+      if (passos[k] === 'EXECUTADO') {
+        // Programado para o dia da execução (conforme) ou 2 dias antes (executado com atraso), em semana já congelada.
+        const dataProg = nProg++ % 3 === 2 ? somarDias(em, -2) : em.slice(0, 10);
+        d.programacao = { equipeId: exec.id, data: dataProg, semana: semanaISO(dataProg), em, por: 'u-sup' };
+        d.execucao = { equipeId: exec.id, atividade: td.atividade, em, por: `u-${exec.id}`, fotos: [], conformeProgramacao: em.slice(0, 10) <= dataProg };
+      }
       if (passos[k] === 'VERIFICADO') d.verificadoEm = em;
       d.historico.push({ status: passos[k], em, por: passos[k] === 'EXECUTADO' ? `u-${exec.id}` : 'u-sup' });
     }
+    if (status === 'PROGRAMADO') {
+      let dia = hoje;
+      for (let k = 0; k < nAtual % 7; k++) dia = proximoDiaUtil(dia);
+      nAtual++;
+      d.programacao = { equipeId: exec.id, data: dia, semana: semanaISO(dia), em: d.historico.at(-1).em, por: 'u-sup' };
+    }
     defeitos.push(d);
+  }
+  // Semanas passadas já congeladas (base da aderência da programação).
+  const congelamentos = {};
+  for (const f of defeitos.filter((x) => x.execucao && x.programacao)) {
+    const c = (congelamentos[f.programacao.semana] ||= { semana: f.programacao.semana, em: `${f.programacao.data}T12:00:00.000Z`, por: 'u-sup', itens: [] });
+    c.itens.push({ defeitoId: f.id, data: f.programacao.data, equipeId: f.programacao.equipeId, custo: null });
   }
 
   const dados = {
@@ -145,6 +168,7 @@ export function gerarSeed() {
     equipes, usuarios, ativos, trechos, inspecoes, defeitos,
     planos: [{ versao: 1, nome: 'Plano de Manutenção — ciclo atual (sintético)', em: new Date().toISOString(), por: 'u-gestor', aceitos: ativos.length, rejeitados: 0, origem: 'Carga inicial sintética' }],
     auditoria: [], fila: [], ultimaSync: null,
+    congelamentos, parametros: { versoes: [] },
   };
   gerarInspecoesDevidas(dados, hoje);
   // Parte das inspeções devidas já distribuída às equipes de inspeção.

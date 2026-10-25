@@ -1,9 +1,13 @@
 // Orquestração: sessão, navegação, GPS, alertas de proximidade, filtros do mapa e service worker.
 import { el, $, $$, toast, distanciaM, hojeISO, somarDias, fmtDataHora } from './util.js';
-import { estado, eventos, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId, rascunhosDoUsuario, resumoFila } from './store.js';
+import { estado, eventos, persistir, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId, rascunhosDoUsuario, resumoFila } from './store.js';
 import { abrirTrabalhoOffline, config as configOffline, definirMapaLeve } from './offline.js';
 import { validarConfig } from './config.js';
-import { PERFIS, TIPOS_EQUIPE, TIPOS_ATIVO, RAIO_ALERTA_M, pendenciasDaEquipe } from './dominio.js';
+import { PERFIS, TIPOS_EQUIPE, TIPOS_ATIVO, PARAM, pendenciasDaEquipe } from './dominio.js';
+import { aplicarParametros } from './parametros.js';
+import { telaParametros } from './parametros-ui.js';
+import { telaProgramacao } from './programacao.js';
+import { completarCustosSemValor } from './custos.js';
 import * as mapa from './mapa.js';
 import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho } from './ui.js';
 import { telaDefeitos, telaPlano, telaPainel, telaProducao } from './telas.js';
@@ -13,13 +17,16 @@ import { POLITICA, iniciarSessao, retomarSessao, encerrarSessao, registrarAtivid
 import { telaLogin, telaTrocaSenha, telaBloqueio, telaAcesso } from './acesso.js';
 
 const TODOS = ['GESTOR', 'SUPERVISOR', 'EQUIPE'];
+// Ordem = prioridade na barra inferior (Hick: no máximo 5 botões; o resto vai para "Mais").
 const VIEWS = {
   mapa: { rotulo: 'Mapa', icone: '🗺️', perfis: TODOS },
   defeitos: { rotulo: 'Defeitos', icone: '⚠️', perfis: [...TODOS, 'AUDITOR'], render: telaDefeitos },
-  plano: { rotulo: 'Plano', icone: '📋', perfis: ['GESTOR', 'SUPERVISOR'], render: telaPlano },
+  programacao: { rotulo: 'Programação', icone: '🗓️', perfis: ['GESTOR', 'SUPERVISOR', 'AUDITOR'], render: telaProgramacao },
   painel: { rotulo: 'Painel', icone: '📊', perfis: ['GESTOR', 'SUPERVISOR', 'AUDITOR'], render: telaPainel },
+  plano: { rotulo: 'Plano', icone: '📋', perfis: ['GESTOR', 'SUPERVISOR'], render: telaPlano },
   producao: { rotulo: 'Produção', icone: '🏆', perfis: TODOS, render: telaProducao },
-  acesso: { rotulo: 'Acesso', icone: '🔐', perfis: ['GESTOR', 'AUDITOR'], render: telaAcesso },
+  parametros: { rotulo: 'Parâmetros', icone: '⚙️', perfis: ['ADMIN', 'GESTOR', 'AUDITOR'] },
+  acesso: { rotulo: 'Acesso', icone: '🔐', perfis: ['ADMIN', 'GESTOR', 'AUDITOR'], render: telaAcesso },
 };
 
 let viewAtual = 'mapa', selecionado = null, gpsId = null, areaAtiva = null, houveOffline = false;
@@ -40,7 +47,7 @@ function aposEntrar() {
   montarNav();
   montarFiltros();
   atualizarTopo();
-  mostrar(VIEWS.mapa.perfis.includes(u.perfil) ? 'mapa' : 'acesso');
+  mostrar(Object.entries(VIEWS).find(([, v]) => v.perfis.includes(u.perfil))[0]);
   setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 50);
 }
 
@@ -70,8 +77,17 @@ function vigiarSessao() {
 // ---------------- Navegação ----------------
 function montarNav() {
   const nav = $('#nav');
-  nav.replaceChildren(...Object.entries(VIEWS).filter(([, v]) => v.perfis.includes(estado.usuario.perfil)).map(([id, v]) =>
-    el('button', { type: 'button', class: 'nav__btn', dataset: { view: id }, onclick: () => mostrar(id) }, el('span', { class: 'nav__ico', text: v.icone, 'aria-hidden': 'true' }), el('span', { text: v.rotulo }))));
+  const minhas = Object.entries(VIEWS).filter(([, v]) => v.perfis.includes(estado.usuario.perfil));
+  const visiveis = minhas.length > 5 ? minhas.slice(0, 4) : minhas;
+  const extras = minhas.length > 5 ? minhas.slice(4) : [];
+  const botao = ([id, v]) => el('button', { type: 'button', class: 'nav__btn', dataset: { view: id }, onclick: () => { const m = $('#nav-mais'); if (m) m.hidden = true; mostrar(id); } },
+    el('span', { class: 'nav__ico', text: v.icone, 'aria-hidden': 'true' }), el('span', { text: v.rotulo }));
+  nav.replaceChildren(...visiveis.map(botao));
+  if (extras.length) {
+    const menu = el('div', { id: 'nav-mais', class: 'nav-mais', hidden: true }, extras.map(botao));
+    nav.append(el('button', { type: 'button', class: 'nav__btn', id: 'nav-mais-btn', dataset: { extras: extras.map(([id]) => id).join(',') }, 'aria-haspopup': 'menu', onclick: () => { menu.hidden = !menu.hidden; } },
+      el('span', { class: 'nav__ico', text: '☰', 'aria-hidden': 'true' }), el('span', { text: 'Mais' })), menu);
+  }
 }
 
 function mostrar(id) {
@@ -84,11 +100,12 @@ function mostrar(id) {
   $(`#view-${id}`).dataset.aberta = '1';
   viewAtual = id;
   $$('.view').forEach((v) => { v.hidden = v.id !== `view-${id}`; });
-  $$('.nav__btn').forEach((b) => b.classList.toggle('ativo', b.dataset.view === id));
+  $$('.nav__btn').forEach((b) => b.classList.toggle('ativo', b.dataset.view === id || (b.dataset.extras || '').split(',').includes(id)));
   if (id !== 'mapa') fecharSheet();
   renderizarAtual();
   if (id === 'mapa') setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 30);
   if (id === 'acesso') telaAcesso($('#view-acesso'));
+  if (id === 'parametros') telaParametros($('#view-parametros'));
   return true;
 }
 
@@ -200,7 +217,7 @@ function checarProximidade() {
     const a = ativoPorId(item.ativoId);
     if (!a) continue;
     const dist = distanciaM(p.lat, p.lon, a.lat, a.lon);
-    if (dist > RAIO_ALERTA_M || alertados.has(`${a.id}|${hoje}`)) continue;
+    if (dist > PARAM.raioAlertaM || alertados.has(`${a.id}|${hoje}`)) continue;
     const reg = porAtivo.get(a.id) || { a, dist, itens: [] };
     reg.itens.push(item);
     porAtivo.set(a.id, reg);
@@ -338,6 +355,8 @@ async function iniciar() {
   }
   validarConfig();
   await carregar();
+  aplicarParametros();
+  if (completarCustosSemValor()) persistir();
   registrarSw();
   mapa.iniciarMapa($('#mapa'), {
     onAtivo: (id) => { logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: id }); selecionado = id; mapa.renderizar(id); abrirAtivo(id); },
@@ -357,7 +376,7 @@ async function iniciar() {
   $('#btn-usuario').addEventListener('click', menuUsuario);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { fecharMais(); if (mapa.modoAtual()) mapa.definirModo(mapa.modoAtual()); else fecharSheet(); } });
   document.addEventListener('sheet-fechado', () => { if (selecionado) { selecionado = null; mapa.renderizar(null); } });
-  eventos.addEventListener('mudou', () => { renderizarAtual(); atualizarTopo(); });
+  eventos.addEventListener('mudou', () => { aplicarParametros(); if (completarCustosSemValor()) persistir(); renderizarAtual(); atualizarTopo(); });
   eventos.addEventListener('rascunho', renderizarTopoMapa);
   eventos.addEventListener('sync', (e) => {
     atualizarTopo();

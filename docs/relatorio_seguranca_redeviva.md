@@ -63,6 +63,7 @@ URL: `https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/app/` · coma
 | LOG-2 Sem dado sensível | ✅ | Varredura do log inteiro: nenhuma senha (certa ou errada); posição GPS fora do log |
 | LOG-3 Integridade | ✅ | Registro só de inclusão encadeado por SHA-256; alterar um registro é detectado ("conteúdo do registro 3 foi alterado") |
 | LOG-4 Acesso aos logs | ✅ | Só gestor e auditoria; consulta, verificação e exportação também são registradas |
+| PARAM-1/2 Parâmetros | ✅ | Vigência no passado e valores fora dos limites recusados; caderno de preços só o Administrador; toda alteração registrada |
 | LOG-5 Cópia oficial | 🔒 | Logs no aparelho podem ser apagados por quem controla o navegador. Produção: envio contínuo a servidor só de inclusão/SIEM |
 
 ### Fase 3 — Autorização
@@ -127,7 +128,7 @@ URL: `https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/app/` · coma
 
 ```bash
 bash testes/seguranca-estatica.sh                 # fases 1.3/1.4, 6 e 8 (estático)
-cd testes && npm install && npx playwright install chromium && npm run e2e   # 33 verificações ponta a ponta
+cd testes && npm install && npx playwright install chromium && npm run e2e   # 38 verificações ponta a ponta
 bash testes/headers.sh https://SEU-DOMINIO/app/   # fase 1, após publicar
 ```
 

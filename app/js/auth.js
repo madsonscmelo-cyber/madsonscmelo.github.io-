@@ -5,7 +5,8 @@ import { estado, persistir } from './store.js';
 import { logar } from './auditoria.js';
 import { uid } from './util.js';
 
-export const POLITICA = Object.freeze({
+// Valores padrão; o Administrador ajusta na tela Parâmetros (grupo Política de acesso), dentro de limites mínimos.
+export const POLITICA = {
   senhaMinimo: 10,
   classesMinimas: 3, // de: maiúscula, minúscula, número, símbolo
   historicoSenhas: 3,
@@ -17,12 +18,12 @@ export const POLITICA = Object.freeze({
   iteracoesPbkdf2: 210000,
   senhaInicialDemo: 'Rede@2026',
   retencaoLogsDias: 365,
-});
+};
 
 const COMUNS = ['123456', '12345678', '123456789', '1234567890', 'senha', 'senha123', 'senha@123', 'password', 'qwerty', 'abc123',
   'admin', 'mudar123', 'neoenergia', 'energia', 'redeviva', 'rede@2026', 'brasil', 'iloveyou', '11111111', '00000000'];
 const MSG_INVALIDO = 'Matrícula ou senha inválidas.';
-const MSG_BLOQUEIO = `Acesso temporariamente bloqueado após várias tentativas. Aguarde ${POLITICA.bloqueioMinutos} minutos ou procure o gestor.`;
+const msgBloqueio = () => `Acesso temporariamente bloqueado após várias tentativas. Aguarde ${POLITICA.bloqueioMinutos} minutos ou procure o gestor.`;
 const CHAVE_SESSAO = 'redeviva-sessao';
 
 export class ErroAuth extends Error {}
@@ -59,12 +60,12 @@ export async function autenticar(matricula, senha) {
   sg.falhasAparelho = sg.falhasAparelho.filter((t) => agora - t < janela);
   if (sg.falhasAparelho.length >= POLITICA.falhasPorAparelho) {
     logar({ categoria: 'SEGURANCA', acao: 'APARELHO_BLOQUEADO', resultado: 'NEGADO', usuario: mat, detalhe: { falhas: sg.falhasAparelho.length } });
-    throw new ErroAuth(MSG_BLOQUEIO);
+    throw new ErroAuth(msgBloqueio());
   }
   const t = (sg.tentativas[mat] ||= { n: 0, bloqueadoAte: 0 });
   if (t.bloqueadoAte > agora) {
     logar({ categoria: 'SEGURANCA', acao: 'LOGIN_DURANTE_BLOQUEIO', resultado: 'NEGADO', usuario: mat });
-    throw new ErroAuth(MSG_BLOQUEIO);
+    throw new ErroAuth(msgBloqueio());
   }
   const u = estado.dados.usuarios.find((x) => x.matricula === mat);
   let ok = false;
@@ -85,7 +86,7 @@ export async function autenticar(matricula, senha) {
       logar({ categoria: 'SEGURANCA', acao: 'BLOQUEIO_POR_TENTATIVAS', resultado: 'NEGADO', usuario: mat, detalhe: { minutos: POLITICA.bloqueioMinutos } });
     }
     await persistir();
-    throw new ErroAuth(t.bloqueadoAte > agora ? MSG_BLOQUEIO : MSG_INVALIDO);
+    throw new ErroAuth(t.bloqueadoAte > agora ? msgBloqueio() : MSG_INVALIDO);
   }
   delete sg.tentativas[mat];
   await persistir();
@@ -191,9 +192,9 @@ export function revalidarUsuario() {
 
 // ---------- Administração (só gestor) ----------
 function exigirGestor() {
-  if (estado.usuario?.perfil !== 'GESTOR') {
+  if (!['GESTOR', 'ADMIN'].includes(estado.usuario?.perfil)) {
     logar({ categoria: 'SEGURANCA', acao: 'ADMIN_NEGADO', resultado: 'NEGADO' });
-    throw new ErroAuth('Somente o gestor administra acessos.');
+    throw new ErroAuth('Somente gestor ou administrador administram acessos.');
   }
 }
 

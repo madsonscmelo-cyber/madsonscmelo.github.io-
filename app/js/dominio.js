@@ -22,27 +22,33 @@ export const TIPOS_EQUIPE = {
   PESADA: 'Turma pesada',
   LINHA_VIVA: 'Linha viva',
   PODA: 'Poda',
+  ROCADA: 'Roçada',
 };
 
+// Categorias também são as linhas do orçamento.
 export const CATEGORIAS = {
   ESTRUTURAL: 'Estrutural',
-  VEGETACAO: 'Vegetação / poda',
+  VEGETACAO: 'Poda',
+  ROCADA: 'Roçada',
   ELETRICO: 'Elétrico',
   FAUNA: 'Fauna',
 };
 
-// equipes: tipos de equipe aptos a executar. resolveNaHora: pode ser baixado na própria inspeção.
+// Catálogo padrão — editável na tela Parâmetros (grupo "Tipos de defeito").
+// equipes: aptas a executar · resolveNaHora: pode ser baixado na inspeção · composicao: item do caderno de custos
+// unidade/quantidadePadrao: defeitos medidos por extensão (poda por vão, roçada por metro) · horasPadrao: por unidade
 export const TIPOS_DEFEITO = [
-  { id: 'NINHO', nome: 'Ninho de pássaro na estrutura', categoria: 'FAUNA', severidade: 'C', equipes: ['LEVE', 'LINHA_VIVA', 'INSPECAO'], resolveNaHora: true, atividade: 'Retirada de ninho' },
-  { id: 'PODA', nome: 'Vegetação em contato/proximidade da rede', categoria: 'VEGETACAO', severidade: 'B', equipes: ['PODA'], resolveNaHora: false, atividade: 'Poda de vegetação' },
-  { id: 'CRUZETA', nome: 'Cruzeta danificada/podre', categoria: 'ESTRUTURAL', severidade: 'A', equipes: ['PESADA', 'LINHA_VIVA'], resolveNaHora: false, atividade: 'Substituição de cruzeta' },
-  { id: 'POSTE_DANIFICADO', nome: 'Poste trincado/inclinado', categoria: 'ESTRUTURAL', severidade: 'A', equipes: ['PESADA'], resolveNaHora: false, atividade: 'Substituição/aprumo de poste' },
-  { id: 'ESTAI', nome: 'Estai frouxo/rompido', categoria: 'ESTRUTURAL', severidade: 'C', equipes: ['LEVE', 'PESADA'], resolveNaHora: true, atividade: 'Reaperto/substituição de estai' },
-  { id: 'ISOLADOR', nome: 'Isolador quebrado/trincado', categoria: 'ELETRICO', severidade: 'B', equipes: ['LINHA_VIVA', 'LEVE'], resolveNaHora: false, atividade: 'Substituição de isolador' },
-  { id: 'CONEXAO', nome: 'Conexão aquecida/oxidada', categoria: 'ELETRICO', severidade: 'B', equipes: ['LINHA_VIVA'], resolveNaHora: false, atividade: 'Refazer conexão' },
-  { id: 'ATERRAMENTO', nome: 'Aterramento rompido/ausente', categoria: 'ELETRICO', severidade: 'C', equipes: ['LEVE'], resolveNaHora: true, atividade: 'Recomposição de aterramento' },
-  { id: 'CHAVE', nome: 'Chave fusível com defeito/elo inadequado', categoria: 'ELETRICO', severidade: 'B', equipes: ['LEVE', 'LINHA_VIVA'], resolveNaHora: false, atividade: 'Manutenção/substituição da chave', ativos: ['CHAVE_FUSIVEL'] },
-  { id: 'TRAFO_VAZAMENTO', nome: 'Vazamento de óleo / sobrecarga no trafo', categoria: 'ELETRICO', severidade: 'A', equipes: ['PESADA'], resolveNaHora: false, atividade: 'Substituição/remanejamento de trafo', ativos: ['TRAFO'] },
+  { id: 'NINHO', nome: 'Ninho de pássaro na estrutura', categoria: 'FAUNA', severidade: 'C', equipes: ['LEVE', 'LINHA_VIVA', 'INSPECAO'], resolveNaHora: true, atividade: 'Retirada de ninho', composicao: 'NINHO', unidade: 'un', quantidadePadrao: 1, horasPadrao: 1 },
+  { id: 'PODA', nome: 'Vegetação em contato/proximidade da rede', categoria: 'VEGETACAO', severidade: 'B', equipes: ['PODA'], resolveNaHora: false, atividade: 'Poda de vegetação', composicao: 'PODA', unidade: 'vão', quantidadePadrao: 1, horasPadrao: 1.5 },
+  { id: 'ROCADA', nome: 'Faixa de servidão com vegetação baixa (roçada)', categoria: 'ROCADA', severidade: 'C', equipes: ['ROCADA', 'PODA'], resolveNaHora: false, atividade: 'Roçada de faixa', composicao: 'ROCADA', unidade: 'm', quantidadePadrao: 100, horasPadrao: 0.02 },
+  { id: 'CRUZETA', nome: 'Cruzeta danificada/podre', categoria: 'ESTRUTURAL', severidade: 'A', equipes: ['PESADA', 'LINHA_VIVA'], resolveNaHora: false, atividade: 'Substituição de cruzeta', composicao: 'CRUZETA', unidade: 'un', quantidadePadrao: 1, horasPadrao: 3 },
+  { id: 'POSTE_DANIFICADO', nome: 'Poste trincado/inclinado', categoria: 'ESTRUTURAL', severidade: 'A', equipes: ['PESADA'], resolveNaHora: false, atividade: 'Substituição/aprumo de poste', composicao: 'POSTE', unidade: 'un', quantidadePadrao: 1, horasPadrao: 6 },
+  { id: 'ESTAI', nome: 'Estai frouxo/rompido', categoria: 'ESTRUTURAL', severidade: 'C', equipes: ['LEVE', 'PESADA'], resolveNaHora: true, atividade: 'Reaperto/substituição de estai', composicao: 'ESTAI', unidade: 'un', quantidadePadrao: 1, horasPadrao: 1.5 },
+  { id: 'ISOLADOR', nome: 'Isolador quebrado/trincado', categoria: 'ELETRICO', severidade: 'B', equipes: ['LINHA_VIVA', 'LEVE'], resolveNaHora: false, atividade: 'Substituição de isolador', composicao: 'ISOLADOR', unidade: 'un', quantidadePadrao: 1, horasPadrao: 2 },
+  { id: 'CONEXAO', nome: 'Conexão aquecida/oxidada', categoria: 'ELETRICO', severidade: 'B', equipes: ['LINHA_VIVA'], resolveNaHora: false, atividade: 'Refazer conexão', composicao: 'CONEXAO', unidade: 'un', quantidadePadrao: 1, horasPadrao: 2 },
+  { id: 'ATERRAMENTO', nome: 'Aterramento rompido/ausente', categoria: 'ELETRICO', severidade: 'C', equipes: ['LEVE'], resolveNaHora: true, atividade: 'Recomposição de aterramento', composicao: 'ATERRAMENTO', unidade: 'un', quantidadePadrao: 1, horasPadrao: 1.5 },
+  { id: 'CHAVE', nome: 'Chave fusível com defeito/elo inadequado', categoria: 'ELETRICO', severidade: 'B', equipes: ['LEVE', 'LINHA_VIVA'], resolveNaHora: false, atividade: 'Manutenção/substituição da chave', ativos: ['CHAVE_FUSIVEL'], composicao: 'CHAVE', unidade: 'un', quantidadePadrao: 1, horasPadrao: 2.5 },
+  { id: 'TRAFO_VAZAMENTO', nome: 'Vazamento de óleo / sobrecarga no trafo', categoria: 'ELETRICO', severidade: 'A', equipes: ['PESADA'], resolveNaHora: false, atividade: 'Substituição/remanejamento de trafo', ativos: ['TRAFO'], composicao: 'TRAFO', unidade: 'un', quantidadePadrao: 1, horasPadrao: 5 },
 ];
 export const tipoDefeito = (id) => TIPOS_DEFEITO.find((t) => t.id === id);
 export const tiposDefeitoPara = (tipoAtivo) => TIPOS_DEFEITO.filter((t) => !t.ativos || t.ativos.includes(tipoAtivo));
@@ -65,11 +71,19 @@ export const PERFIS = {
   SUPERVISOR: 'Supervisor de campo',
   EQUIPE: 'Equipe de campo',
   AUDITOR: 'Auditoria (somente leitura)',
+  ADMIN: 'Administrador (parâmetros e acessos)',
 };
 
-export const RAIO_VALIDACAO_M = 50;
-export const RAIO_ALERTA_M = 150;
-export const JANELA_PROGRAMACAO_DIAS = 30;
+/** Parâmetros gerais em vigor. Valores padrão; a tela Parâmetros substitui (ver parametros.js). */
+export const PARAM = {
+  raioValidacaoM: 50,
+  raioAlertaM: 150,
+  janelaProgramacaoDias: 30,
+  horasDiaEquipe: 8,
+  diasUteisSemana: 5,
+  sla: { A: 7, B: 30, C: 90 },
+  metas: { aderenciaPlano: 0.9, aderenciaProgramacao: 0.9, slaCriticos: 1 },
+};
 
 // Indicadores de continuidade sintéticos por conjunto (DEC/FEC em horas/vezes, 12 meses).
 export const CONJUNTOS = {
@@ -79,16 +93,22 @@ export const CONJUNTOS = {
 };
 
 // ---------- Score de risco (§6) ----------
-const PESO_SEV = { A: 40, B: 25, C: 10 };
+export const RISCO = {
+  sevA: 40, sevB: 25, sevC: 10,
+  clientesMax: 20, ucsReferencia: 500,
+  continuidadeAcima: 15, continuidadeDentro: 5,
+  compensacaoMax: 15, compensacaoReferencia: 50000,
+  reincidenciaMax: 10, pontosPorFalha: 2.5,
+};
 
 export function scoreRisco(defeito, ativo) {
-  const cj = CONJUNTOS[ativo?.conjunto];
+  const cj = CONJUNTOS[ativo?.conjunto], R = RISCO;
   const partes = {
-    severidade: PESO_SEV[defeito.severidade] || 0,
-    clientes: Math.min(20, Math.round(((ativo?.ucs || 0) / 500) * 20)),
-    continuidade: cj ? (cj.decApurado > cj.decMeta ? 15 : 5) : 0,
-    compensacao: Math.min(15, Math.round(((ativo?.comp12m || 0) / 50000) * 15)),
-    reincidencia: Math.min(10, Math.round((ativo?.falhas12m || 0) * 2.5)),
+    severidade: R[`sev${defeito.severidade}`] || 0,
+    clientes: Math.min(R.clientesMax, Math.round(((ativo?.ucs || 0) / R.ucsReferencia) * R.clientesMax)),
+    continuidade: cj ? (cj.decApurado > cj.decMeta ? R.continuidadeAcima : R.continuidadeDentro) : 0,
+    compensacao: Math.min(R.compensacaoMax, Math.round(((ativo?.comp12m || 0) / R.compensacaoReferencia) * R.compensacaoMax)),
+    reincidencia: Math.min(R.reincidenciaMax, Math.round((ativo?.falhas12m || 0) * R.pontosPorFalha)),
   };
   return { total: Object.values(partes).reduce((a, b) => a + b, 0), partes };
 }
@@ -104,7 +124,7 @@ export function faixaRisco(score) {
 /** Gera inspeções programadas devidas para cada par ativo×critério sem inspeção em aberto. */
 export function gerarInspecoesDevidas(dados, ref = hojeISO()) {
   const abertas = new Set(dados.inspecoes.filter((i) => i.status !== 'CONCLUIDA').map((i) => `${i.ativoId}|${i.criterioId}`));
-  const limite = somarDias(ref, JANELA_PROGRAMACAO_DIAS);
+  const limite = somarDias(ref, PARAM.janelaProgramacaoDias);
   let geradas = 0;
   for (const a of dados.ativos) {
     for (const cid of a.criterios || []) {
@@ -235,7 +255,7 @@ export function indicadores(dados, ref = hojeISO()) {
   const porSev = { A: 0, B: 0, C: 0 };
   abertos.forEach((d) => porSev[d.severidade]++);
   const idadeMedia = abertos.length ? abertos.reduce((s, d) => s + diasEntre(d.criadoEm, ref), 0) / abertos.length : 0;
-  const criticosVelhos = abertos.filter((d) => d.severidade === 'A' && diasEntre(d.criadoEm, ref) > 7).length;
+  const criticosVelhos = abertos.filter((d) => d.severidade === 'A' && diasEntre(d.criadoEm, ref) > PARAM.sla.A).length;
 
   const porEquipeTipo = Object.fromEntries(Object.keys(TIPOS_EQUIPE).map((k) => [k, 0]));
   abertos.forEach((d) => { porEquipeTipo[tipoDefeito(d.tipoId)?.equipes[0]]++; });

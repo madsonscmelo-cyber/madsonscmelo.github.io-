@@ -25,8 +25,8 @@ export function telaDefeitos(raiz, { abrirNoMapa }) {
     abertos: (f) => STATUS_ABERTOS.includes(f.status),
     verificar: (f) => f.status === 'EXECUTADO',
     fechados: (f) => ['VERIFICADO', 'REJEITADO', 'CANCELADO'].includes(f.status),
-    todos: () => true,
   };
+  if (!grupos[filtroDef.grupo]) filtroDef.grupo = 'abertos';
   const minhaSet = eq ? new Set(pendenciasDaEquipe(d, eq).filter((p) => p.tipo === 'defeito').map((p) => p.ref.id)) : null;
   const lista = d.defeitos
     .filter(grupos[filtroDef.grupo])
@@ -43,21 +43,27 @@ export function telaDefeitos(raiz, { abrirNoMapa }) {
     return s;
   };
   const alims = [...new Set(d.ativos.map((a) => a.alimentador))].sort();
-  const barra = el('div', { class: 'filtros' },
-    sel('grupo', [['abertos', 'Abertos'], ['verificar', 'Aguardando verificação'], ['fechados', 'Fechados'], ['todos', 'Todos']]),
-    sel('sev', [['', 'Todas severidades'], ['A', 'Severidade A'], ['B', 'Severidade B'], ['C', 'Severidade C']]),
-    sel('equipeTipo', [['', 'Qualquer equipe'], ...Object.entries(TIPOS_EQUIPE)]),
-    sel('alimentador', [['', 'Todos alimentadores'], ...alims.map((a) => [a, a])]));
+  const contagem = (g) => d.defeitos.filter(grupos[g]).length;
+  const abas = el('div', { class: 'abas', role: 'tablist' }, [['abertos', 'Abertos'], ['verificar', 'A verificar'], ['fechados', 'Fechados']].map(([v, t]) =>
+    el('button', { type: 'button', role: 'tab', 'aria-selected': String(filtroDef.grupo === v), class: `abas__btn${filtroDef.grupo === v ? ' ativo' : ''}`, onclick: () => { filtroDef.grupo = v; telaDefeitos(raiz, { abrirNoMapa }); } },
+      el('span', { text: t }), el('span', { class: 'abas__n', text: contagem(v) }))));
+  const ativos = [filtroDef.sev, filtroDef.equipeTipo, filtroDef.alimentador].filter(Boolean).length;
+  const mais = el('details', { class: 'mais-filtros', open: ativos > 0 }, el('summary', { text: `Mais filtros${ativos ? ` (${ativos} ativo${ativos > 1 ? 's' : ''})` : ''}` }),
+    el('div', { class: 'filtros' },
+      sel('sev', [['', 'Todas severidades'], ['A', 'Severidade A'], ['B', 'Severidade B'], ['C', 'Severidade C']]),
+      sel('equipeTipo', [['', 'Qualquer equipe'], ...Object.entries(TIPOS_EQUIPE)]),
+      sel('alimentador', [['', 'Todos alimentadores'], ...alims.map((a) => [a, a])]),
+      el('button', { type: 'button', class: 'btn btn--txt', text: 'Exportar CSV', onclick: () => exportarDefeitos(lista.map((x) => x.f)) })));
+  const barra = el('div', { class: 'filtros' }, abas);
   if (eq) {
     const cb = el('input', { type: 'checkbox', checked: filtroDef.minha });
     cb.addEventListener('change', () => { filtroDef.minha = cb.checked; telaDefeitos(raiz, { abrirNoMapa }); });
-    barra.append(el('label', { class: 'campo--check' }, cb, el('span', { text: 'Só os da minha equipe (a executar, executados ou identificados por ela)' })));
+    barra.append(el('label', { class: 'campo--check' }, cb, el('span', { text: 'Só da minha equipe' })));
   }
-  barra.append(el('button', { type: 'button', class: 'btn btn--sec', text: 'Exportar CSV', onclick: () => exportarDefeitos(lista.map((x) => x.f)) }));
 
   raiz.replaceChildren(
     el('header', { class: 'tela__topo' }, el('h1', { text: 'Defeitos' }), el('span', { class: 'muted', text: `${lista.length} registro(s) · ordenados por risco` })),
-    barra,
+    barra, mais,
     el('div', { class: 'grade-cards' }, lista.length ? lista.map(({ f }) => cartaoDefeito(f, { comAtivo: true, aoAbrirAtivo: abrirNoMapa })) : el('p', { class: 'muted', text: 'Nada encontrado com esses filtros.' })),
   );
 }
@@ -281,15 +287,17 @@ export function telaPainel(raiz, { abrirNoMapa }) {
       el('div', { class: 'linha' },
         el('button', { type: 'button', class: 'btn btn--sec', text: 'Exportar defeitos (CSV)', onclick: () => exportarDefeitos(d.defeitos) }),
         el('button', { type: 'button', class: 'btn btn--sec', text: 'Imprimir / PDF', onclick: () => window.print() }))),
-    el('div', { class: 'kpis' },
-      kpi('Aderência ao plano', fmtPct(ind.aderencia), `${ind.devidas} devidas até hoje · meta 90%`, ind.aderencia >= 0.9 ? 'kpi--ok' : 'kpi--alerta'),
-      kpi('Inspeções vencidas', fmtNum(ind.vencidas), 'prazo expirado sem execução', ind.vencidas ? 'kpi--alerta' : 'kpi--ok'),
-      kpi('Defeitos abertos', fmtNum(ind.abertos), `A ${ind.porSev.A} · B ${ind.porSev.B} · C ${ind.porSev.C}`),
-      kpi('Críticos > 7 dias', fmtNum(ind.criticosVelhos), 'meta: zero', ind.criticosVelhos ? 'kpi--critico' : 'kpi--ok'),
-      kpi('Compensação dos ativos críticos', fmtMoeda(ind.compCriticosMes), `/mês · ${ind.ativosCriticos} trafos/chaves reincidentes no plano`),
-      kpi('Compensação exposta', fmtMoeda(ind.compExpostaMes), `/mês · ${ind.ativosExpostos} ativo(s) com defeito A/B aberto`),
-      kpi('Lead time defeito→execução', `${ind.leadTime.toFixed(1)} d`, `idade média do backlog ${ind.idadeMedia.toFixed(1)} d`),
-      kpi('Aguardando verificação', fmtNum(ind.aguardandoVerificacao), 'executados sem validação do supervisor')),
+    el('div', { class: 'kpi-grupos' },
+      el('section', { class: 'kpi-grupo' }, el('h2', { text: 'Execução do plano' }), el('div', { class: 'kpis' },
+        kpi('Aderência ao plano', fmtPct(ind.aderencia), `${ind.devidas} devidas até hoje · meta 90%`, ind.aderencia >= 0.9 ? '' : 'kpi--alerta'),
+        kpi('Inspeções vencidas', fmtNum(ind.vencidas), 'prazo expirado sem execução', ind.vencidas ? 'kpi--alerta' : ''),
+        kpi('Lead time defeito→execução', `${ind.leadTime.toFixed(1)} d`, `idade média do backlog ${ind.idadeMedia.toFixed(1)} d`),
+        kpi('Aguardando verificação', fmtNum(ind.aguardandoVerificacao), 'executados sem validação do supervisor'))),
+      el('section', { class: 'kpi-grupo' }, el('h2', { text: 'Risco e impacto' }), el('div', { class: 'kpis' },
+        kpi('Críticos > 7 dias', fmtNum(ind.criticosVelhos), 'meta: zero', ind.criticosVelhos ? 'kpi--critico' : ''),
+        kpi('Defeitos abertos', fmtNum(ind.abertos), `A ${ind.porSev.A} · B ${ind.porSev.B} · C ${ind.porSev.C}`),
+        kpi('Compensação exposta', fmtMoeda(ind.compExpostaMes), `/mês · ${ind.ativosExpostos} ativo(s) com defeito A/B aberto`),
+        kpi('Compensação dos ativos críticos', fmtMoeda(ind.compCriticosMes), `/mês · ${ind.ativosCriticos} trafos/chaves reincidentes no plano`)))),
     el('div', { class: 'grade-2' },
       secao('Evolução do plano (8 semanas)', graficoSemanas(ind.semanas)),
       secao('Aderência por critério', barras(ind.porCriterio.map((p) => ({ rotulo: p.criterio.nome, valor: p.devidas ? p.noPrazo / p.devidas : 1, classe: p.devidas && p.noPrazo / p.devidas < 0.9 ? 'alerta' : 'ok' })), { max: 1, formato: fmtPct })),

@@ -1,0 +1,13 @@
+{
+  "name": "redeviva-testes",
+  "private": true,
+  "description": "Testes de usabilidade, segurança e ponta a ponta do protótipo RedeViva",
+  "scripts": {
+    "e2e": "node e2e.cjs",
+    "seguranca": "bash seguranca-estatica.sh",
+    "headers": "bash headers.sh"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

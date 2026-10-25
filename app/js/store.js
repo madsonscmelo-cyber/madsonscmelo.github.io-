@@ -72,6 +72,22 @@ export async function resetarDados() {
   emitir('mudou');
 }
 
+// ---------- Rascunhos (efeito Zeigarnik: trabalho iniciado não se perde e fica visível até ser concluído) ----------
+export function salvarRascunho(r) {
+  estado.dados.rascunhos ||= {};
+  estado.dados.rascunhos[r.chave] = { ...r, usuarioId: estado.usuario.id, atualizadoEm: new Date().toISOString() };
+  persistir();
+  emitir('rascunho');
+}
+export function removerRascunho(chave) {
+  if (!estado.dados.rascunhos?.[chave]) return;
+  delete estado.dados.rascunhos[chave];
+  persistir();
+  emitir('rascunho');
+}
+export const obterRascunho = (chave) => estado.dados.rascunhos?.[chave] || null;
+export const rascunhosDoUsuario = () => Object.values(estado.dados.rascunhos || {}).filter((r) => r.usuarioId === estado.usuario?.id);
+
 /** Toda mutação passa por aqui: grava auditoria, enfileira para sync e notifica as telas. */
 export function registrar(acao, entidade, entidadeId, detalhe = {}) {
   const em = new Date().toISOString();

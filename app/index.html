@@ -31,18 +31,25 @@
     <section id="view-mapa" class="view view--mapa">
       <div id="mapa" aria-label="Mapa da rede"></div>
       <div id="mapa-ctrl" class="mapa-ctrl"></div>
+      <div id="mapa-topo" class="mapa-topo"></div>
       <div id="painel-filtros" class="flutuante filtros-mapa" hidden></div>
-      <div class="legenda" aria-label="Legenda">
-        <span class="leg"><i class="mk mk--poste mk--sev-A"></i>Defeito A</span>
-        <span class="leg"><i class="mk mk--poste mk--sev-B"></i>B</span>
-        <span class="leg"><i class="mk mk--poste mk--sev-C"></i>C</span>
-        <span class="leg"><i class="mk mk--poste mk--insp-vencida"></i>Insp. vencida</span>
-        <span class="leg"><i class="mk mk--poste mk--insp-pendente"></i>Programada</span>
-        <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado</span>
-        <span class="leg"><i class="mk mk--poste mk--ok"></i>Em dia</span>
-        <span class="leg"><i class="mk mk--trafo mk--neutro"></i>Trafo</span>
-        <span class="leg"><i class="mk mk--chave_fusivel mk--neutro"></i>Chave</span>
-      </div>
+      <details class="legenda">
+        <summary>Legenda</summary>
+        <div class="legenda__grupo"><strong>Defeito aberto</strong>
+          <span class="leg"><i class="mk mk--poste mk--sev-A"></i>A crítico</span>
+          <span class="leg"><i class="mk mk--poste mk--sev-B"></i>B</span>
+          <span class="leg"><i class="mk mk--poste mk--sev-C"></i>C</span></div>
+        <div class="legenda__grupo"><strong>Inspeção</strong>
+          <span class="leg"><i class="mk mk--poste mk--insp-vencida"></i>Vencida</span>
+          <span class="leg"><i class="mk mk--poste mk--insp-pendente"></i>Programada</span></div>
+        <div class="legenda__grupo"><strong>Situação</strong>
+          <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado</span>
+          <span class="leg"><i class="mk mk--poste mk--ok"></i>Em dia</span></div>
+        <div class="legenda__grupo"><strong>Ativo</strong>
+          <span class="leg"><i class="mk mk--poste mk--neutro"></i>Poste</span>
+          <span class="leg"><i class="mk mk--trafo mk--neutro"></i>Trafo</span>
+          <span class="leg"><i class="mk mk--chave_fusivel mk--neutro"></i>Chave</span></div>
+      </details>
     </section>
     <section id="view-defeitos" class="view tela" hidden></section>
     <section id="view-plano" class="view tela" hidden></section>
@@ -51,11 +58,13 @@
   </main>
 
   <aside id="sheet" class="sheet" hidden aria-labelledby="sheet-titulo">
+    <div class="sheet__alca" aria-hidden="true"></div>
     <div class="sheet__cab">
       <h2 id="sheet-titulo">—</h2>
       <button id="sheet-fechar" type="button" class="btn btn--txt" aria-label="Fechar painel">✕</button>
     </div>
     <div id="sheet-corpo" class="sheet__corpo"></div>
+    <div id="sheet-rodape" class="sheet__rodape" hidden></div>
   </aside>
 
   <nav id="nav" class="nav" aria-label="Navegação principal"></nav>

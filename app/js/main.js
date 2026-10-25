@@ -1,9 +1,10 @@
 // Orquestração: sessão, navegação, GPS, alertas de proximidade, filtros do mapa e service worker.
-import { el, $, $$, toast, distanciaM, hojeISO, fmtDataHora } from './util.js';
-import { estado, eventos, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId } from './store.js';
+import { el, $, $$, toast, distanciaM, hojeISO, somarDias, fmtDataHora } from './util.js';
+import { estado, eventos, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId, rascunhosDoUsuario } from './store.js';
+import { validarConfig } from './config.js';
 import { PERFIS, TIPOS_EQUIPE, TIPOS_ATIVO, RAIO_ALERTA_M, pendenciasDaEquipe } from './dominio.js';
 import * as mapa from './mapa.js';
-import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual } from './ui.js';
+import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho } from './ui.js';
 import { telaDefeitos, telaPlano, telaPainel, telaProducao } from './telas.js';
 import { criarAtivoAvulso } from './acoes.js';
 
@@ -80,6 +81,7 @@ function mostrar(id) {
 function renderizarAtual() {
   if (!estado.usuario) return;
   mapa.renderizar(selecionado);
+  renderizarTopoMapa();
   const v = VIEWS[viewAtual];
   if (v.render) v.render($(`#view-${viewAtual}`), { abrirNoMapa });
   const s = sheetAtual();
@@ -188,15 +190,67 @@ function checarProximidade() {
 }
 
 // ---------------- Controles e filtros do mapa ----------------
+// Hick: 3 ações frequentes visíveis; as eventuais ficam em "Mais".
 function montarControles() {
   const btn = (ico, rotulo, fn, id) => el('button', { type: 'button', class: 'ctrl', title: rotulo, 'aria-label': rotulo, id, onclick: fn }, el('span', { text: ico, 'aria-hidden': 'true' }), el('span', { class: 'ctrl__rot', text: rotulo }));
+  const mais = el('div', { id: 'mapa-mais', class: 'mapa-mais', hidden: true },
+    btn('🎯', 'Simular posição', () => { fecharMais(); pararGps(); mapa.definirModo('simular'); }, 'ctrl-simular'),
+    btn('＋', 'Ponto avulso', () => { fecharMais(); mapa.definirModo('avulso'); }, 'ctrl-avulso'),
+    btn('⬇', 'Baixar mapa offline', () => { fecharMais(); mapa.baixarAreaOffline(); }, 'ctrl-offline'));
   $('#mapa-ctrl').replaceChildren(
-    btn('📍', 'Minha posição', iniciarGps),
-    btn('🎯', 'Simular posição', () => { pararGps(); mapa.definirModo('simular'); }, 'ctrl-simular'),
+    btn('📍', 'Minha posição', iniciarGps, 'ctrl-gps'),
     btn('▭', 'Selecionar área', () => mapa.definirModo('area'), 'ctrl-area'),
-    btn('＋', 'Ponto avulso', () => mapa.definirModo('avulso'), 'ctrl-avulso'),
-    btn('⬇', 'Mapa offline', () => mapa.baixarAreaOffline()),
-    btn('⚙', 'Filtros', () => { const f = $('#painel-filtros'); f.hidden = !f.hidden; }));
+    btn('⚙', 'Filtros', () => { const f = $('#painel-filtros'); f.hidden = !f.hidden; fecharMais(); }, 'ctrl-filtros'),
+    btn('⋯', 'Mais', () => { mais.hidden = !mais.hidden; $('#painel-filtros').hidden = true; }, 'ctrl-mais'),
+    mais);
+}
+const fecharMais = () => { const m = $('#mapa-mais'); if (m) m.hidden = true; };
+
+// Jakob (busca como em apps de mapa) + Gradiente de meta (progresso do dia) + Zeigarnik (trabalho em andamento).
+function renderizarTopoMapa() {
+  const topo = $('#mapa-topo');
+  if (!topo || !estado.usuario) return;
+  if (!topo.querySelector('.busca')) topo.append(montarBusca());
+  topo.querySelector('.progresso-dia')?.remove();
+  topo.querySelectorAll('.rascunho').forEach((n) => n.remove());
+  const eq = equipeDoUsuario();
+  if (eq) {
+    const p = progressoDoDia(eq);
+    const preench = el('span', { class: 'progresso-dia__preench' });
+    preench.style.width = `${p.total ? Math.round((p.feitas / p.total) * 100) : 0}%`;
+    topo.append(el('div', { class: 'progresso-dia', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': p.total, 'aria-valuenow': p.feitas, 'aria-label': 'Progresso do dia' },
+      el('div', { class: 'progresso-dia__txt' }, el('strong', { text: `Hoje: ${p.feitas} de ${p.total}` }),
+        el('span', { class: 'muted', text: p.total - p.feitas ? `faltam ${p.total - p.feitas}` : p.total ? 'meta do dia cumprida 🎉' : 'sem pendências na semana' })),
+      el('span', { class: 'progresso-dia__trilho' }, preench)));
+  }
+  for (const r of rascunhosDoUsuario().slice(0, 2)) {
+    topo.append(el('button', { type: 'button', class: 'rascunho', onclick: () => retomarRascunho(r) },
+      el('span', { text: `📝 ${r.titulo} — parou na etapa ${r.etapa + 1} de 3` }), el('strong', { text: 'Continuar' })));
+  }
+}
+
+/** Meta do dia = já feito hoje + pendências da equipe com prazo até 7 dias (inclui vencidas) + defeitos programados. */
+function progressoDoDia(eq) {
+  const d = estado.dados, hoje = hojeISO(), limite = somarDias(hoje, 7);
+  const feitas = d.inspecoes.filter((i) => i.equipeId === eq.id && i.status === 'CONCLUIDA' && i.concluidaEm.slice(0, 10) === hoje).length
+    + d.defeitos.filter((f) => f.execucao?.equipeId === eq.id && f.execucao.em.slice(0, 10) === hoje && !f.execucao.naHora).length;
+  const pend = pendenciasDaEquipe(d, eq).filter((p) => (p.tipo === 'inspecao' ? p.ref.prazo <= limite && p.ref.equipeId === eq.id : p.ref.status === 'PROGRAMADO')).length;
+  return { feitas, total: feitas + pend };
+}
+
+function montarBusca() {
+  const lista = el('div', { class: 'busca__res', role: 'listbox' });
+  const inp = el('input', { type: 'search', class: 'busca__inp', placeholder: '🔍 Buscar ativo (ex.: TR-07-03)', 'aria-label': 'Buscar ativo pelo código', autocomplete: 'off', maxlength: 30 });
+  const fechar = () => { lista.replaceChildren(); inp.value = ''; };
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim().toUpperCase();
+    if (q.length < 2) { lista.replaceChildren(); return; }
+    const achados = estado.dados.ativos.filter((a) => a.codigo.includes(q)).slice(0, 6);
+    lista.replaceChildren(...(achados.length ? achados.map((a) => el('button', { type: 'button', class: 'busca__item', role: 'option', onclick: () => { fechar(); inp.blur(); abrirNoMapa(a.id); } },
+      el('strong', { text: a.codigo }), el('span', { class: 'muted', text: `${TIPOS_ATIVO[a.tipo]} · ${a.alimentador}` }))) : [el('div', { class: 'busca__vazio muted', text: 'Nenhum ativo com esse código.' })]));
+  });
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') lista.querySelector('.busca__item')?.click(); });
+  return el('div', { class: 'busca' }, inp, lista);
 }
 
 function montarFiltros() {
@@ -224,6 +278,7 @@ function montarFiltros() {
 
 function aoModo(modo) {
   ['simular', 'area', 'avulso'].forEach((m) => $(`#ctrl-${m}`)?.classList.toggle('ctrl--ativo', modo === m));
+  $('#ctrl-mais')?.classList.toggle('ctrl--ativo', modo === 'simular' || modo === 'avulso');
 }
 
 // ---------------- Service worker ----------------
@@ -235,6 +290,12 @@ function registrarSw() {
 
 // ---------------- Início ----------------
 async function iniciar() {
+  // Checklist 1.4: GitHub Pages não permite o cabeçalho X-Frame-Options; recusa rodar dentro de iframe (clickjacking).
+  if (window.top !== window.self) {
+    document.body.replaceChildren(el('p', { class: 'erro-fatal', text: 'Por segurança, o RedeViva não pode ser aberto dentro de outra página.' }));
+    return;
+  }
+  validarConfig();
   await carregar();
   registrarSw();
   mapa.iniciarMapa($('#mapa'), {
@@ -251,9 +312,10 @@ async function iniciar() {
   montarControles();
   $('#sheet-fechar').addEventListener('click', fecharSheet);
   $('#btn-usuario').addEventListener('click', menuUsuario);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (mapa.modoAtual()) mapa.definirModo(mapa.modoAtual()); else fecharSheet(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { fecharMais(); if (mapa.modoAtual()) mapa.definirModo(mapa.modoAtual()); else fecharSheet(); } });
   document.addEventListener('sheet-fechado', () => { if (selecionado) { selecionado = null; mapa.renderizar(null); } });
   eventos.addEventListener('mudou', () => { renderizarAtual(); atualizarTopo(); });
+  eventos.addEventListener('rascunho', renderizarTopoMapa);
   eventos.addEventListener('sync', (e) => {
     atualizarTopo();
     if (e.detail?.enviados && houveOffline) { houveOffline = false; toast(`Conexão restabelecida: ${e.detail.enviados} registro(s) sincronizado(s).`, { tipo: 'ok' }); }
@@ -270,5 +332,6 @@ async function iniciar() {
 
 iniciar().catch((e) => {
   console.error(e);
-  document.body.append(el('p', { class: 'erro-fatal', text: `Falha ao iniciar: ${e.message}` }));
+  // Checklist 6.5: sem detalhes internos para o usuário (o detalhe fica no console).
+  document.body.append(el('p', { class: 'erro-fatal', text: 'Falha ao iniciar o aplicativo. Recarregue a página ou acione o suporte.' }));
 });

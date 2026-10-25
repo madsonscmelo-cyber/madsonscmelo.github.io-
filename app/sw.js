@@ -1,11 +1,11 @@
 // Service worker: app shell em network-first (pega atualização quando há rede) e tiles em cache-first.
-const VERSAO = 'redeviva-v1';
+const VERSAO = 'redeviva-v2';
 const TILES = 'redeviva-tiles';
 const MAX_TILES = 1500;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'css/app.css',
   'vendor/leaflet/leaflet.css', 'vendor/leaflet/leaflet.js',
-  'js/main.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/mapa.js', 'js/ui.js', 'js/telas.js', 'js/acoes.js', 'js/fotos.js',
+  'js/main.js', 'js/config.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/mapa.js', 'js/ui.js', 'js/telas.js', 'js/acoes.js', 'js/fotos.js',
   'modelos/template-plano.csv', 'modelos/exemplo-plano-com-erros.csv',
 ];
 

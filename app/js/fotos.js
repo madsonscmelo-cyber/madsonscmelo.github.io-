@@ -35,8 +35,8 @@ async function processar(arquivo, rotulo) {
  * Campo de fotos reutilizável. Retorna { elemento, fotos() } — fotos() devolve [{id, hash}].
  * minimo: quantidade obrigatória para salvar.
  */
-export function campoFotos({ rotulo, minimo = 1, titulo = 'Fotos' }) {
-  const lista = [];
+export function campoFotos({ rotulo, minimo = 1, titulo = 'Fotos', iniciais = [], aoMudar = () => {} }) {
+  const lista = [...iniciais];
   const miniaturas = el('div', { class: 'fotos__lista' });
   const contador = el('span', { class: 'fotos__contador' });
   const atualizar = () => { contador.textContent = `${lista.length} / mín. ${minimo}`; contador.classList.toggle('ok', lista.length >= minimo); };
@@ -48,6 +48,7 @@ export function campoFotos({ rotulo, minimo = 1, titulo = 'Fotos' }) {
         const id = await salvarFoto(blob);
         lista.push({ id, hash });
         miniaturas.append(el('img', { src: URL.createObjectURL(blob), alt: 'Foto de evidência', class: 'fotos__mini' }));
+        aoMudar(lista.slice());
       } catch (e) {
         toast(`Foto recusada: ${e.message}`, { tipo: 'erro' });
       }
@@ -55,11 +56,15 @@ export function campoFotos({ rotulo, minimo = 1, titulo = 'Fotos' }) {
     input.value = '';
     atualizar();
   });
+  iniciais.forEach(async (f) => {
+    const blob = await obterFoto(f.id);
+    if (blob) miniaturas.append(el('img', { src: URL.createObjectURL(blob), alt: 'Foto de evidência', class: 'fotos__mini' }));
+  });
   atualizar();
   const elemento = el('div', { class: 'campo fotos' },
     el('div', { class: 'fotos__topo' }, el('span', { class: 'campo__rotulo', text: titulo }), contador),
     miniaturas,
-    el('button', { type: 'button', class: 'btn btn--sec', text: '📷 Tirar / anexar foto', onclick: () => input.click() }),
+    el('button', { type: 'button', class: 'btn btn--sec btn--largo', text: '📷 Tirar / anexar foto', onclick: () => input.click() }),
     input,
   );
   return { elemento, fotos: () => lista.slice(), suficiente: () => lista.length >= minimo };

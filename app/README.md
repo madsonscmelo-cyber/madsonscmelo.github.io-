@@ -36,17 +36,32 @@ No celular, a instalação como app (PWA) exige HTTPS — por exemplo, publicand
 | Produção da equipe e ranking ponderado por tipo de equipe (com penalidade por rejeição e estorno por reincidência) | RF-EQP-04, 05, §8 |
 | Offline-first: tudo grava no IndexedDB do aparelho; fila de sincronização visível; modo offline simulável | RF-INS-06, RNF-01 |
 
+## Usabilidade (as 7 leis)
+
+Aplicadas e testadas — detalhes em [`docs/guia_usabilidade_redeviva.md`](../docs/guia_usabilidade_redeviva.md):
+ação principal única e larga no rodapé (Fitts), menos opções por tela (Hick), rascunho automático com aviso "continuar" (Zeigarnik),
+busca e botão voltar como nos apps de mapa (Jakob), assistente em 3 etapas e progresso do dia (Gradiente de meta),
+destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (Miller).
+
+## Testes
+
+```bash
+bash testes/seguranca-estatica.sh
+cd testes && npm install && npx playwright install chromium && npm run e2e
+```
+Resultado atual: 18/18 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+
 ## Roteiro de demonstração (cenário §14 da especificação)
 
 1. Entre como **Gestão de Planejamento** → **Painel**: aderência, compensação dos ativos críticos (≈ R$ 100 mil/mês nos trafos e chaves reincidentes), top 10 por risco.
 2. **Plano** → *Importar plano (CSV)* → use *Exemplo para teste*: 6 linhas aceitas e 4 rejeitadas (fora da área, coordenada inválida, duplicada, critério incompatível).
-3. Menu do usuário → *Trocar usuário* → **Equipe Inspeção 01** → **Produção** → toque num trafo em *Minhas pendências*.
-4. Toque em **🎯 Simular posição** e depois no mapa, perto do trafo: aparece o alerta de proximidade.
-5. **Inspecionar** → marque um item como *Não conforme* → adicione o defeito *Vazamento de óleo* (vai para turma pesada) e um *Ninho* com "resolvido na hora" → foto → *Concluir*.
+3. Menu do usuário → *Trocar usuário* → **Equipe Inspeção 01** → busque um trafo pelo código (ex.: `TR-07-03`).
+4. **⋯ Mais → 🎯 Simular posição** e toque no mapa perto do trafo: aparece o alerta de proximidade.
+5. **Inspecionar agora** → marque *Não conforme* → adicione *Vazamento de óleo* (vai para turma pesada) e um *Ninho* "resolvido na hora". Feche no meio: o aviso 📝 *Continuar* aparece no mapa. Termine com a foto geral → *Concluir*.
 6. Menu → *Simular modo offline* antes de concluir para ver a fila de sincronização; volte para online e ela é enviada.
 7. **Supervisão de Campo** → **Defeitos** → *Validar* → *Programar* (só aparecem equipes aptas).
 8. **Equipe Turma Pesada 01** → **Defeitos** → *Registrar execução* com foto.
-9. **Supervisão de Campo** → filtro *Aguardando verificação* → *Verificar e fechar* → veja o ranking em **Produção**.
+9. **Supervisão de Campo** → aba *A verificar* → *Verificar e fechar* → veja o ranking em **Produção**.
 
 ## O que é simulado (e como fica no produto)
 

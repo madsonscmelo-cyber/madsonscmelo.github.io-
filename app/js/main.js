@@ -8,8 +8,10 @@ import { aplicarParametros } from './parametros.js';
 import { telaParametros } from './parametros-ui.js';
 import { telaProgramacao } from './programacao.js';
 import { completarCustosSemValor } from './custos.js';
+import { abrirTrecho, adicionarPonto, trilhaAtiva, iniciarPatrulha, atualizarPainel as atualizarPainelTrilha, simularPatrulha } from './trilha.js';
+import { criarArea, trechoPorId, tiposPlano } from './planos.js';
 import * as mapa from './mapa.js';
-import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho } from './ui.js';
+import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho, abrirSheet } from './ui.js';
 import { telaDefeitos, telaPlano, telaPainel, telaProducao } from './telas.js';
 import { criarAtivoAvulso } from './acoes.js';
 import { logar } from './auditoria.js';
@@ -115,7 +117,7 @@ function renderizarAtual() {
   renderizarTopoMapa();
   const v = VIEWS[viewAtual];
   // A tela de logs é lida sob demanda (não a cada alteração de dados), para não recarregar a tabela enquanto se lê.
-  if (v.render && viewAtual !== 'acesso') v.render($(`#view-${viewAtual}`), { abrirNoMapa });
+  if (v.render && viewAtual !== 'acesso') v.render($(`#view-${viewAtual}`), { abrirNoMapa, abrirTrechoNoMapa, desenharNoMapa });
   const s = sheetAtual();
   if (s?.tipo === 'ativo') abrirAtivo(s.id);
   else if (s?.tipo === 'area' && areaAtiva) abrirArea(mapa.ativosNaArea(areaAtiva), limparArea);
@@ -129,6 +131,58 @@ function abrirNoMapa(ativoId) {
   mapa.renderizar(selecionado);
   mapa.focar(a.lat, a.lon);
   abrirAtivo(a.id);
+}
+
+function abrirTrechoNoMapa(id) {
+  const t = trechoPorId(id);
+  if (!t || !VIEWS.mapa.perfis.includes(estado.usuario.perfil) || !mostrar('mapa')) return;
+  const meio = t.coords[Math.floor(t.coords.length / 2)];
+  mapa.focar(meio[0], meio[1], 16);
+  abrirTrecho(id);
+}
+
+/** Desenho de área de plano no mapa: polígono (3+ pontos) ou círculo (1 ponto, raio padrão de escola). */
+let preDesenho = {};
+function desenharNoMapa(pre) {
+  preDesenho = pre || {};
+  if (!mostrar('mapa')) return;
+  fecharSheet();
+  if (mapa.modoAtual() !== 'desenho') mapa.definirModo('desenho');
+  painelDesenho([]);
+}
+function painelDesenho(pts) {
+  const box = $('#desenho-painel');
+  box.hidden = mapa.modoAtual() !== 'desenho';
+  if (box.hidden) return;
+  box.replaceChildren(
+    el('strong', { text: `✏️ Área de plano: ${pts.length} ponto(s)` }),
+    el('span', { class: 'pequeno muted', text: pts.length === 1 ? 'Um ponto vira círculo (ex.: escola).' : pts.length === 2 ? 'Toque mais um ponto para formar o polígono.' : pts.length ? 'Polígono pronto: toque Concluir ou continue.' : 'Toque no mapa para marcar os vértices.' }),
+    el('div', { class: 'linha' },
+      el('button', { type: 'button', class: 'btn', text: 'Concluir', disabled: !(pts.length === 1 || pts.length >= 3), onclick: () => concluirDesenho(pts) }),
+      el('button', { type: 'button', class: 'btn btn--txt', text: 'Cancelar', onclick: () => { mapa.definirModo('desenho'); box.hidden = true; } })));
+}
+function concluirDesenho(pts) {
+  const circulo = pts.length === 1;
+  const selTipo = el('select', { class: 'campo__input' }, tiposPlano().filter((t) => t.id !== 'BASE').map((t) => el('option', { value: t.id, text: t.nome, selected: t.id === (preDesenho.tipoPlano || (circulo ? 'ESCOLA' : 'URBANO')) })));
+  const nome = el('input', { class: 'campo__input', maxlength: 120, value: preDesenho.nome || '', placeholder: circulo ? 'Ex.: Escola Municipal X' : 'Ex.: Circuito do carnaval' });
+  const raio = el('input', { type: 'number', class: 'campo__input', min: 20, max: 5000, value: PARAM.raioEscolaM });
+  const ini = el('input', { type: 'date', class: 'campo__input', value: preDesenho.inicio || '' }), fim = el('input', { type: 'date', class: 'campo__input', value: preDesenho.fim || '' });
+  const datas = el('div', { class: 'linha', hidden: selTipo.value !== 'EVENTO' }, el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Início' }), ini), el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Fim' }), fim));
+  selTipo.addEventListener('change', () => { datas.hidden = selTipo.value !== 'EVENTO'; });
+  const corpo = el('div', { class: 'form' },
+    el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Tipo de plano' }), selTipo),
+    el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Nome' }), nome),
+    circulo ? el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: 'Raio (m)' }), raio) : null, datas);
+  abrirSheet('Novo plano especial', corpo, { tipo: 'form' }, el('button', { type: 'button', class: 'btn btn--grande', text: 'Salvar plano', onclick: () => {
+    try {
+      const geometria = circulo ? { tipo: 'circulo', centro: pts[0], raioM: Math.max(20, Number(raio.value) || PARAM.raioEscolaM) } : { tipo: 'poligono', coords: pts };
+      const a = criarArea({ tipoPlano: selTipo.value, nome: nome.value, geometria, inicio: ini.value, fim: fim.value });
+      mapa.definirModo('desenho');
+      $('#desenho-painel').hidden = true;
+      fecharSheet();
+      toast(`Plano "${a.nome}" cadastrado.`, { tipo: 'ok' });
+    } catch (e) { toast(e.message, { tipo: 'erro' }); }
+  } }));
 }
 
 function limparArea() {
@@ -183,6 +237,7 @@ function menuUsuario() {
 function aplicarPosicao(p) {
   estado.posicao = { ...p, em: new Date().toISOString() };
   mapa.definirPosicao(estado.posicao);
+  if (trilhaAtiva()) adicionarPonto(p);
   checarProximidade();
 }
 
@@ -243,7 +298,9 @@ function montarControles() {
   const mais = el('div', { id: 'mapa-mais', class: 'mapa-mais', hidden: true },
     btn('🎯', 'Simular posição', () => { fecharMais(); pararGps(); mapa.definirModo('simular'); }, 'ctrl-simular'),
     btn('＋', 'Ponto avulso', () => { fecharMais(); mapa.definirModo('avulso'); }, 'ctrl-avulso'),
-    btn('📦', 'Trabalho offline', () => { fecharMais(); abrirTrabalhoOffline(); }, 'ctrl-offline'));
+    btn('📦', 'Trabalho offline', () => { fecharMais(); abrirTrabalhoOffline(); }, 'ctrl-offline'),
+    btn('🚨', 'Modo patrulha', () => { fecharMais(); iniciarPatrulha(); }, 'ctrl-patrulha'),
+    ['GESTOR', 'ADMIN'].includes(estado.usuario?.perfil) ? btn('✏️', 'Desenhar área de plano', () => { fecharMais(); desenharNoMapa({}); }, 'ctrl-desenho') : null);
   $('#mapa-ctrl').replaceChildren(
     btn('📍', 'Minha posição', iniciarGps, 'ctrl-gps'),
     btn('▭', 'Selecionar área', () => mapa.definirModo('area'), 'ctrl-area'),
@@ -317,6 +374,8 @@ function montarFiltros() {
     cb('Defeitos abertos', () => f.camadas.defeitos, (v) => { f.camadas.defeitos = v; }),
     cb('Inspeções programadas/vencidas', () => f.camadas.inspecoes, (v) => { f.camadas.inspecoes = v; }),
     cb('Ativos em dia / sem criticidade', () => f.camadas.emDia, (v) => { f.camadas.emDia = v; }),
+    cb('Trechos pela situação do plano', () => f.camadas.trechos, (v) => { f.camadas.trechos = v; }),
+    cb('Áreas de planos especiais', () => f.camadas.planos, (v) => { f.camadas.planos = v; }),
     estado.usuario.perfil === 'EQUIPE' ? cb('Só pendências da minha equipe', () => f.minhaEquipe, (v) => { f.minhaEquipe = v; }) : null,
     sel('Alimentador', [['', 'Todos'], ...[...new Set(d.ativos.map((a) => a.alimentador))].sort().map((a) => [a, a])], 'alimentador'),
     sel('Defeito exige equipe', [['', 'Qualquer'], ...Object.entries(TIPOS_EQUIPE)], 'equipeTipo'),
@@ -368,9 +427,13 @@ async function iniciar() {
       abrirFormInspecao({ ativos: [a], inspecoes: [], avulsa: true });
     },
     onSimular: (p) => aplicarPosicao({ ...p, precisao: 5, simulada: true }),
-    onModo: aoModo,
+    onModo: (m) => { aoModo(m); if (m !== 'desenho') { const b = $('#desenho-painel'); if (b) b.hidden = true; } },
+    onTrecho: (id) => abrirTrecho(id),
+    onDesenho: (pts) => painelDesenho(pts),
   });
   mapa.definirFundo(configOffline().mapaLeve);
+  atualizarPainelTrilha();
+  window.__simularPatrulha = simularPatrulha; // demonstração/teste: percorre 2 trechos em modo patrulha
   montarControles();
   $('#sheet-fechar').addEventListener('click', fecharSheet);
   $('#btn-usuario').addEventListener('click', menuUsuario);

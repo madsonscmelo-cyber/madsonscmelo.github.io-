@@ -10,7 +10,10 @@ import { cartaoDefeito } from './ui.js';
 import { atribuirInspecao, distribuirAutomatico, ErroRegra } from './acoes.js';
 import { logar } from './auditoria.js';
 import { orcamentoDoMes, projecaoCarteira, mesDe } from './custos.js';
-import { CATEGORIAS } from './dominio.js';
+import { secaoPlanosKm, indicadoresKmi, completude } from './planos.js';
+import { secaoFunil, secaoOcorrencias } from './eficacia.js';
+import { aderenciaUltimas } from './programacao.js';
+import { CATEGORIAS, PARAM } from './dominio.js';
 
 const pode = (...p) => p.includes(estado.usuario.perfil);
 const secao = (titulo, ...conteudo) => el('section', { class: 'bloco' }, el('h2', { text: titulo }), ...conteudo);
@@ -150,7 +153,8 @@ export function importarPlano(texto, nomeArquivo) {
   return { aceitos, rejeitados, novos, geradas, versao };
 }
 
-export function telaPlano(raiz, { abrirNoMapa }) {
+export function telaPlano(raiz, ctx) {
+  const { abrirNoMapa, abrirTrechoNoMapa, desenharNoMapa } = ctx;
   const d = estado.dados, ind = indicadores(d);
   const atual = d.planos.at(-1);
   const input = el('input', { type: 'file', accept: '.csv,text/csv', class: 'oculto' });
@@ -163,7 +167,7 @@ export function telaPlano(raiz, { abrirNoMapa }) {
     const res = tentar(() => importarPlano(texto, f.name));
     if (res) {
       ultimoRelatorio = res;
-      telaPlano(raiz, { abrirNoMapa });
+      telaPlano(raiz, ctx);
       toast(`Plano v${res.versao}: ${res.aceitos} aceitos, ${res.rejeitados.length} rejeitados, ${res.geradas} inspeções geradas.`, { tipo: res.rejeitados.length ? 'aviso' : 'ok', duracao: 7000 });
     }
   });
@@ -199,7 +203,7 @@ export function telaPlano(raiz, { abrirNoMapa }) {
     .sort((a, b) => a.prazo.localeCompare(b.prazo));
   const selF = (chave, ops) => {
     const s = el('select', { class: 'campo__input' }, ops.map(([v, t]) => el('option', { value: v, text: t, selected: filtroInsp[chave] === v })));
-    s.addEventListener('change', () => { filtroInsp[chave] = s.value; telaPlano(raiz, { abrirNoMapa }); });
+    s.addEventListener('change', () => { filtroInsp[chave] = s.value; telaPlano(raiz, ctx); });
     return s;
   };
   const tb = el('tbody');
@@ -224,7 +228,9 @@ export function telaPlano(raiz, { abrirNoMapa }) {
     el('header', { class: 'tela__topo' }, el('h1', { text: 'Plano de manutenção' }),
       el('span', { class: 'muted', text: `Versão ${atual.versao} · ${atual.nome} · ${fmtDataHora(atual.em)}` })),
     acoes, rel,
-    secao('Critérios e periodicidade', tabela(['Critério', 'Periodicidade', 'Ativos', 'Devidas até hoje', 'No prazo', 'Vencidas', 'Aderência'], linhasCrit)),
+    secaoPlanosKm({ abrirTrechoNoMapa, desenharNoMapa }),
+    secaoOcorrencias(),
+    secao('Critérios e periodicidade (ativos pontuais)', tabela(['Critério', 'Periodicidade', 'Ativos', 'Devidas até hoje', 'No prazo', 'Vencidas', 'Aderência'], linhasCrit)),
     secao('Inspeções', el('div', { class: 'filtros' },
       selF('status', [['abertas', 'Em aberto'], ['sem', 'Sem equipe'], ['vencidas', 'Vencidas'], ['concluidas', 'Concluídas']]),
       selF('criterio', [['', 'Todos critérios'], ...CRITERIOS.map((c) => [c.id, c.nome])]),
@@ -290,9 +296,10 @@ export function telaPainel(raiz, { abrirNoMapa }) {
       el('div', { class: 'linha' },
         el('button', { type: 'button', class: 'btn btn--sec', text: 'Exportar defeitos (CSV)', onclick: () => exportarDefeitos(d.defeitos) }),
         el('button', { type: 'button', class: 'btn btn--sec', text: 'Imprimir / PDF', onclick: () => { logar({ categoria: 'EXPORTACAO', acao: 'PAINEL_IMPRESSO' }); window.print(); } }))),
+    secaoFunil({ kmi: indicadoresKmi()[0], completude: completude(), aderenciaProg: aderenciaUltimas() }),
     el('div', { class: 'kpi-grupos' },
       el('section', { class: 'kpi-grupo' }, el('h2', { text: 'Execução do plano' }), el('div', { class: 'kpis' },
-        kpi('Aderência ao plano', fmtPct(ind.aderencia), `${ind.devidas} devidas até hoje · meta 90%`, ind.aderencia >= 0.9 ? '' : 'kpi--alerta'),
+        kpi('Aderência — ativos críticos', fmtPct(ind.aderencia), `trafos/chaves/postes: ${ind.devidas} inspeções devidas`, ind.aderencia >= PARAM.metas.aderenciaPlano ? '' : 'kpi--alerta'),
         kpi('Inspeções vencidas', fmtNum(ind.vencidas), 'prazo expirado sem execução', ind.vencidas ? 'kpi--alerta' : ''),
         kpi('Lead time defeito→execução', `${ind.leadTime.toFixed(1)} d`, `idade média do backlog ${ind.idadeMedia.toFixed(1)} d`),
         kpi('Aguardando verificação', fmtNum(ind.aguardandoVerificacao), 'executados sem validação do supervisor'))),

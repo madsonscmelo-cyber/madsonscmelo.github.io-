@@ -235,7 +235,7 @@ Tudo o que é regra vira parâmetro, com tela de administração, **vigência** 
 
 ## 11. Implementação proposta [SUPOSIÇÃO de prazo]
 
-> **Situação em 25/10/2026:** etapas **1** (parâmetros com vigência + Administrador), **4** (tela Programação) e **6** (caderno, composições, custo-padrão/realizado, orçamento × realizado) **entregues** no protótipo. Próximas: 2, 3 e 5.
+> **Situação em 25/10/2026:** as **6 etapas entregues** no protótipo (dados sintéticos). Pendente para produção: trechos e áreas a partir do KMZ real, ocorrências reais do OMS e calibragem das janelas e metas.
 
 | Etapa | Entrega | Duração |
 |---|---|---|

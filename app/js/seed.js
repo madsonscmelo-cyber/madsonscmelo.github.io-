@@ -1,8 +1,9 @@
 // Dados 100% sintéticos para o protótipo. Nenhum ativo, código ou valor corresponde à rede real.
 import { mulberry32, deslocar, distanciaM, hojeISO, somarDias, uid, semanaISO, proximoDiaUtil } from './util.js';
 import { CRITERIOS, tiposDefeitoPara, gerarInspecoesDevidas } from './dominio.js';
+import { dividirLinha, comprimentoKm } from './rede.js';
 
-export const VERSAO_SCHEMA = 5;
+export const VERSAO_SCHEMA = 6;
 
 const SE = [-15.8405, -48.0760]; // subestação fictícia
 const ROTAS = {
@@ -170,9 +171,69 @@ export function gerarSeed() {
     auditoria: [], fila: [], ultimaSync: null,
     congelamentos, parametros: { versoes: [] },
   };
+  gerarRedeEPlanos(dados, { rnd, entre, inteiro, escolher, hoje, inspetores });
   gerarInspecoesDevidas(dados, hoje);
   // Parte das inspeções devidas já distribuída às equipes de inspeção.
   dados.inspecoes.filter((i) => i.status === 'PENDENTE').forEach((i, n) => { if (n % 3 !== 0) { i.equipeId = inspetores[n % 2].id; i.status = 'ATRIBUIDA'; } });
   return dados;
 }
 
+
+/** Trechos de inspeção (~1 km), áreas de planos especiais, histórico de inspeção por km e ocorrências sintéticas. */
+function gerarRedeEPlanos(dados, { rnd, entre, inteiro, escolher, hoje, inspetores }) {
+  const trechosInsp = [];
+  for (const t of dados.trechos) {
+    dividirLinha(t.coords, 1000).forEach((coords, i) => trechosInsp.push({
+      id: `${t.alimentador}-T${String(i + 1).padStart(2, '0')}`, alimentador: t.alimentador, conjunto: t.conjunto, coords, km: Math.round(comprimentoKm(coords) * 100) / 100,
+    }));
+  }
+  dados.trechosInspecao = trechosInsp;
+
+  // Histórico: última inspeção completa de cada trecho (algumas vencidas) e patrulhas parciais.
+  dados.inspecoesTrecho = [];
+  for (const t of trechosInsp) {
+    const dias = inteiro(10, 230);
+    const fim = `${somarDias(hoje, -dias)}T11:00:00.000Z`;
+    const drone = rnd() < 0.2;
+    dados.inspecoesTrecho.push({ id: uid('it'), trechoId: t.id, tipo: drone ? 'DRONE' : 'TERRESTRE', equipeId: escolher(inspetores).id, inicio: fim, fim,
+      cobertura: Math.round(entre(0.96, 1) * 1000) / 1000, km: t.km, completa: true, checklist: {}, fotos: [], sintetico: true });
+    if (rnd() < 0.3) {
+      const c = Math.round(entre(0.3, 0.8) * 100) / 100;
+      const em = `${somarDias(hoje, -inteiro(1, 40))}T09:00:00.000Z`;
+      dados.inspecoesTrecho.push({ id: uid('it'), trechoId: t.id, tipo: 'PATRULHA', equipeId: 'LEV-01', inicio: em, fim: em, cobertura: c, km: Math.round(t.km * c * 100) / 100, completa: false, checklist: {}, fotos: [], sintetico: true });
+    }
+  }
+
+  // Áreas de planos especiais (todas fictícias).
+  const alim = (a) => trechosInsp.filter((t) => t.alimentador === a);
+  const meio = (t) => t.coords[Math.floor(t.coords.length / 2)];
+  const bbox = (pts, folga) => {
+    const la = pts.map((p) => p[0]), lo = pts.map((p) => p[1]);
+    const [a, b, c, d] = [Math.min(...la) - folga, Math.max(...la) + folga, Math.min(...lo) - folga, Math.max(...lo) + folga];
+    return [[a, c], [a, d], [b, d], [b, c]];
+  };
+  const a07 = alim('ALM-07'), a11 = alim('ALM-11'), a03 = alim('ALM-03');
+  dados.areasPlano = [
+    { id: 'AR-OURO-1', tipoPlano: 'OURO', nome: 'Hospital Regional (fictício) — ALM-07', geometria: { tipo: 'trechos', ids: a07.slice(0, 2).map((t) => t.id) } },
+    { id: 'AR-URB-1', tipoPlano: 'URBANO', nome: 'Centro urbano (fictício)', geometria: { tipo: 'poligono', coords: bbox(a07.slice(1, 4).flatMap((t) => t.coords), 0.004) } },
+    ...[[a07[2], 'Escola Municipal Exemplo 1'], [a11[1], 'Escola Estadual Exemplo 2'], [a03[3], 'Creche Exemplo 3']].filter(([t]) => t).map(([t, nome], i) => {
+      const [la, lo] = meio(t);
+      return { id: `AR-ESC-${i + 1}`, tipoPlano: 'ESCOLA', nome, geometria: { tipo: 'circulo', centro: [la + 0.0009, lo + 0.0006], raioM: 200 } };
+    }),
+    { id: 'AR-EVT-1', tipoPlano: 'EVENTO', nome: 'Micareta (fictícia) — circuito', inicio: somarDias(hoje, 20), fim: somarDias(hoje, 23),
+      geometria: { tipo: 'poligono', coords: bbox(a11.slice(2, 4).flatMap((t) => t.coords), 0.002) } },
+  ];
+
+  // Ocorrências (desarmes) dos últimos 200 dias — causas com códigos da tabela padrão.
+  const causas = ['VEG', 'VEG', 'VEG', 'EST', 'EST', 'CONEX', 'TRAFO', 'CHAVE', 'FAIXA', 'FAUNA', 'DESC', 'DESC', 'ABAL', 'NID', 'OBJ'];
+  dados.ocorrencias = [];
+  for (let i = 0; i < 22; i++) {
+    const t = escolher(trechosInsp);
+    const p = escolher(t.coords);
+    const causa = escolher(causas);
+    const ucs = inteiro(80, 1800);
+    const horas = Math.round(entre(0.5, 4) * 10) / 10;
+    dados.ocorrencias.push({ id: uid('oc'), dataHora: `${somarDias(hoje, -inteiro(2, 200))}T${String(inteiro(0, 23)).padStart(2, '0')}:10:00.000Z`, alimentador: t.alimentador,
+      lat: p[0] + entre(-0.0003, 0.0003), lon: p[1] + entre(-0.0003, 0.0003), causa, ucs, chi: Math.round(ucs * horas), origem: 'sintética' });
+  }
+}

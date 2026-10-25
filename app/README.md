@@ -55,6 +55,18 @@ No celular, a instalação como app (PWA) exige HTTPS — por exemplo, publicand
 - **Custo-padrão** = itens do caderno de serviços × quantidade da composição × extensão (vãos de poda, metros de roçada) × fator regional do conjunto. Na execução o custo é gravado com os preços do dia (custo realizado).
 - **Painel**: bloco "Custo e orçamento" com saldo do mês e quanto custaria a carteira sem data (só críticos e total).
 
+## Plano por km, patrulha, drone e eficácia
+
+- **Trechos de ~1 km** gerados a partir do traçado (no real: do KMZ). No mapa, cada trecho tem a cor da situação no plano: em dia, vence em 15 dias, vencido. Toque no trecho abre a ficha.
+- **Tipos de plano** (Parâmetros → Tipos de plano): base (rede inteira), trecho ouro, área urbana, segurança em escolas (raio), evento (com início e fim; inspeção até N dias antes) e especial. Cada trecho segue a exigência mais rígida dos planos em que está.
+- **Cadastro de áreas** (gestor): na tela Plano, marcando trechos, ou no mapa (**⋯ Mais → ✏️ Desenhar área de plano**): um ponto vira círculo (escola), 3+ pontos viram polígono (urbano, evento).
+- **Inspeção de trecho com trajeto GPS**: "Iniciar inspeção do trecho" grava o caminho e mostra a cobertura ao vivo. Só é **completa** (conta no KMI) com cobertura ≥ 95%, checklist respondido e foto; senão fica parcial. Botão "Simular caminhada (demo)" para demonstração.
+- **Patrulha da emergência** (**⋯ Mais → 🚨 Modo patrulha**): grava o trajeto e registra km patrulhado por trecho; não conta no KMI, mas trechos com cobertura suficiente podem ser completados como inspeção.
+- **Drone**: na ficha do trecho, "Importar voo de drone" (KML ou CSV com lat/lon) — exemplo em `modelos/exemplo-voo-drone-ALM-07-T03.kml`.
+- **KMI** (tela Plano): por plano — km em dia ÷ km do plano, km inspecionado e só patrulhado no mês, lista de trechos vencidos.
+- **Ocorrências (OMS)**: importação CSV (`modelos/template-ocorrencias.csv`); cada desarme com causa evitável é atribuído à etapa que falhou — plano, inspeção, programação ou manutenção — pela tabela de causas × atividade e janelas (Parâmetros → Causas).
+- **Painel → Funil da manutenção**: aderência ao plano (KMI) → inspeções completas → aderência da programação → eficácia, com gráfico de onde os desarmes evitáveis falharam e alerta de qualidade do código de causa.
+
 ## Parâmetros (⚙️)
 
 Tudo que é regra é editável, com **data de início de vigência**, motivo e histórico; nada é recalculado para trás:
@@ -84,7 +96,7 @@ destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (M
 bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e
 ```
-Resultado atual: 38/38 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+Resultado atual: 45/45 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
 
 ## Roteiro de demonstração (cenário §14 da especificação)
 

@@ -3,7 +3,7 @@ import { el, toast, fmtData, fmtDataHora, hojeISO, csvParse } from './util.js';
 import { estado, nomeUsuario } from './store.js';
 import { ESQUEMA, valor, versoes, podeEditar, salvarVersao, ErroParametro } from './parametros.js';
 
-const ORDEM = ['orcamento', 'caderno', 'composicoes', 'fatores', 'tiposDefeito', 'criterios', 'motivos', 'metas', 'geral', 'risco', 'ranking', 'seguranca'];
+const ORDEM = ['orcamento', 'caderno', 'composicoes', 'fatores', 'tiposDefeito', 'criterios', 'tiposPlano', 'causas', 'motivos', 'metas', 'geral', 'risco', 'ranking', 'seguranca'];
 const estadoTela = { grupo: 'orcamento', rascunho: null, rascunhoGrupo: null };
 
 export function telaParametros(raiz) {

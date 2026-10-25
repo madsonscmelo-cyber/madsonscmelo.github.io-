@@ -3,13 +3,15 @@
 import { el, toast } from './util.js';
 import { estado, equipeDoUsuario } from './store.js';
 import { estadoAtivo, pendenciasDaEquipe, tipoDefeito, STATUS_ABERTOS, TIPOS_ATIVO } from './dominio.js';
+import { trechos as trechosInspecao, situacaoTrecho, areas, areaAtiva, tipoPlano } from './planos.js';
 
 const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-let mapa, camadaRuas, grupoAtivos, grupoTrechos, marcadorUsuario, circuloUsuario, retangulo;
+let mapa, camadaRuas, grupoAtivos, grupoTrechos, grupoAreas, grupoTrilha, grupoDesenho, marcadorUsuario, circuloUsuario, retangulo;
+let pontosDesenho = [];
 let modo = null, cantoA = null, retornos = {};
 
 export const filtros = {
-  camadas: { defeitos: true, inspecoes: true, emDia: true },
+  camadas: { defeitos: true, inspecoes: true, emDia: true, trechos: true, planos: true },
   alimentador: '',
   equipeTipo: '',
   minhaEquipe: false,
@@ -23,7 +25,10 @@ export function iniciarMapa(container, cb) {
     maxZoom: 19, crossOrigin: 'anonymous',
     attribution: '&copy; OpenStreetMap',
   }).addTo(mapa);
+  grupoAreas = L.layerGroup().addTo(mapa);
   grupoTrechos = L.layerGroup().addTo(mapa);
+  grupoTrilha = L.layerGroup().addTo(mapa);
+  grupoDesenho = L.layerGroup().addTo(mapa);
   grupoAtivos = L.layerGroup().addTo(mapa);
   mapa.on('click', aoClicar);
   return mapa;
@@ -38,6 +43,10 @@ function aoClicar(ev) {
   } else if (modo === 'avulso') {
     definirModo(null);
     retornos.onPontoAvulso?.({ lat, lon: lng });
+  } else if (modo === 'desenho') {
+    pontosDesenho.push([lat, lng]);
+    redesenharDesenho();
+    retornos.onDesenho?.(pontosDesenho.slice());
   } else if (modo === 'area') {
     if (!cantoA) {
       cantoA = ev.latlng;
@@ -57,12 +66,28 @@ export function definirModo(novo) {
   cantoA = null;
   container().classList.toggle('mapa--modo', !!modo);
   retornos.onModo?.(modo);
-  const dicas = { area: 'Seleção de área: toque em dois cantos.', avulso: 'Toque no mapa onde está o ponto da inspeção avulsa.', simular: 'Simulação de posição: toque no mapa para mover a equipe.' };
+  if (modo !== 'desenho') limparDesenho();
+  const dicas = { desenho: 'Desenho de área: toque nos vértices do polígono (ou um único ponto para círculo) e depois em Concluir.', area: 'Seleção de área: toque em dois cantos.', avulso: 'Toque no mapa onde está o ponto da inspeção avulsa.', simular: 'Simulação de posição: toque no mapa para mover a equipe.' };
   if (modo) toast(dicas[modo]);
   return modo;
 }
 export const modoAtual = () => modo;
 const container = () => mapa.getContainer();
+
+function redesenharDesenho() {
+  grupoDesenho.clearLayers();
+  pontosDesenho.forEach((p) => L.circleMarker(p, { radius: 6, className: 'desenho-vertice', interactive: false }).addTo(grupoDesenho));
+  if (pontosDesenho.length >= 2) L.polygon(pontosDesenho, { className: 'desenho-area', interactive: false }).addTo(grupoDesenho);
+}
+export function limparDesenho() { pontosDesenho = []; grupoDesenho?.clearLayers(); }
+export const pontosDoDesenho = () => pontosDesenho.slice();
+
+/** Trajeto em gravação (inspeção de trecho, patrulha ou voo de drone). */
+export function desenharTrilha(pts) {
+  if (!grupoTrilha) return;
+  grupoTrilha.clearLayers();
+  if (pts?.length > 1) L.polyline(pts, { className: 'trilha', interactive: false }).addTo(grupoTrilha);
+}
 
 export function desenharArea(bounds) {
   limparArea();
@@ -83,9 +108,31 @@ export function renderizar(selecionadoId) {
   const d = estado.dados;
   grupoTrechos.clearLayers();
   grupoAtivos.clearLayers();
-  for (const t of d.trechos) {
-    if (filtros.alimentador && t.alimentador !== filtros.alimentador) continue;
-    L.polyline(t.coords, { className: `tronco tronco--${t.alimentador.toLowerCase()}`, weight: 5, interactive: false }).addTo(grupoTrechos);
+  grupoAreas.clearLayers();
+  if (filtros.camadas.planos) {
+    for (const a of areas().filter((x) => areaAtiva(x))) {
+      const g = a.geometria;
+      const dica = el('span', { text: `${tipoPlano(a.tipoPlano)?.nome || a.tipoPlano}: ${a.nome}` });
+      const op = { className: `area-plano area-plano--${a.tipoPlano.toLowerCase()}`, interactive: true };
+      if (g.tipo === 'circulo') L.circle(g.centro, { ...op, radius: g.raioM }).bindTooltip(dica).addTo(grupoAreas);
+      else if (g.tipo === 'poligono') L.polygon(g.coords, op).bindTooltip(dica).addTo(grupoAreas);
+    }
+  }
+  const ts = trechosInspecao();
+  if (ts.length && filtros.camadas.trechos) {
+    // Trechos de inspeção (~1 km) coloridos pela situação no plano; toque abre a ficha do trecho.
+    for (const t of ts) {
+      if (filtros.alimentador && t.alimentador !== filtros.alimentador) continue;
+      const sit = situacaoTrecho(t);
+      const linha = L.polyline(t.coords, { className: `tronco tronco--${sit.id}`, weight: 7 });
+      linha.on('click', (ev) => { L.DomEvent.stopPropagation(ev); if (!modo) retornos.onTrecho?.(t.id); });
+      linha.addTo(grupoTrechos);
+    }
+  } else {
+    for (const t of d.trechos) {
+      if (filtros.alimentador && t.alimentador !== filtros.alimentador) continue;
+      L.polyline(t.coords, { className: `tronco tronco--${t.alimentador.toLowerCase()}`, weight: 5, interactive: false }).addTo(grupoTrechos);
+    }
   }
   const eq = equipeDoUsuario();
   const relevantes = filtros.minhaEquipe && eq ? new Set(pendenciasDaEquipe(d, eq).map((p) => p.ativoId)) : null;

@@ -334,6 +334,109 @@ function registrar(id, nome, passou, evidencia) {
     await pp.screenshot({ path: path.join(SAIDA, 'programacao.png'), fullPage: true });
     await cp.close();
 
+    // ================= Plano por km, patrulha, drone, áreas e eficácia =================
+    const ck = await browser.newContext({ viewport: { width: 1366, height: 900 }, serviceWorkers: 'block' });
+    const pk = await ck.newPage();
+    vigiar(pk);
+    pk.on('dialog', (d) => d.accept());
+    await pk.goto(BASE);
+    await entrar(pk, 'Equipe Inspeção 01');
+    const kmiAntes = await pk.evaluate(async () => (await import('./js/planos.js')).indicadoresKmi()[0]);
+    const alvoT = await pk.evaluate(async () => { const P = await import('./js/planos.js'); return P.trechos().find((t) => P.situacaoTrecho(t).id === 'vencido')?.id; });
+    await pk.evaluate(async (id) => (await import('./js/trilha.js')).abrirTrecho(id), alvoT);
+    await pk.click('#sheet-rodape button:has-text("Iniciar inspeção do trecho")');
+    await pk.click('#trilha-painel button:has-text("Simular caminhada")');
+    await pk.waitForFunction(() => /cobertura (9[5-9]|100)%/.test(document.querySelector('#trilha-painel')?.textContent || ''), null, { timeout: 15000 });
+    await pk.click('#trilha-painel button:has-text("Concluir")');
+    for (const g of await pk.locator('#sheet .segmentado').all()) await g.locator('.segmentado__op').first().click();
+    await pk.setInputFiles('#sheet .fotos input[type=file]', FOTO);
+    await pk.waitForTimeout(500);
+    await pk.click('#sheet-rodape button:has-text("Salvar inspeção do trecho")');
+    await pk.waitForTimeout(400);
+    const kmiDepois = await pk.evaluate(async (id) => { const P = await import('./js/planos.js'); return { kmi: P.indicadoresKmi()[0], sit: P.situacaoTrecho(P.trechoPorId(id)).id, ult: P.ultimaCompleta(id) }; }, alvoT);
+    registrar('KMI-1', 'Inspeção de trecho com trajeto GPS: cobertura ≥ 95% + checklist + foto conta no KMI', kmiDepois.sit === 'emdia' && kmiDepois.ult?.completa && kmiDepois.kmi.kmEmDia > kmiAntes.kmEmDia,
+      `${alvoT}: cobertura ${(kmiDepois.ult?.cobertura * 100).toFixed(0)}% · km em dia ${kmiAntes.kmEmDia.toFixed(1)} → ${kmiDepois.kmi.kmEmDia.toFixed(1)} · aderência ${(kmiAntes.aderencia * 100).toFixed(0)}% → ${(kmiDepois.kmi.aderencia * 100).toFixed(0)}%`);
+
+    // Cobertura baixa: vira parcial e não conta
+    const alvo2 = await pk.evaluate(async () => { const P = await import('./js/planos.js'); return P.trechos().find((t) => P.situacaoTrecho(t).id === 'vencido')?.id; });
+    const parcial = await pk.evaluate(async (id) => {
+      const T = await import('./js/trilha.js'); const P = await import('./js/planos.js');
+      T.iniciarTrilha('TRECHO', id);
+      await new Promise((r) => T.simularPercurso(id, { fracao: 0.5, aoTerminar: r }));
+      return { antes: P.indicadoresKmi()[0].kmEmDia };
+    }, alvo2);
+    await pk.click('#trilha-painel button:has-text("Concluir")');
+    await pk.click('#sheet-rodape button:has-text("Salvar inspeção do trecho")');
+    await pk.waitForTimeout(300);
+    const parcialDepois = await pk.evaluate(async (id) => { const P = await import('./js/planos.js'); const i = P.inspecoesDoTrecho(id)[0]; return { completa: i.completa, cob: i.cobertura, km: P.indicadoresKmi()[0].kmEmDia }; }, alvo2);
+    registrar('KMI-2', 'Trajeto que cobre só parte do trecho fica como parcial e não soma no KMI', !parcialDepois.completa && Math.abs(parcialDepois.km - parcial.antes) < 0.01, `${alvo2}: cobertura ${(parcialDepois.cob * 100).toFixed(0)}% → parcial`);
+
+    // Patrulha da emergência
+    const patrulha = await pk.evaluate(async () => {
+      const P = await import('./js/planos.js');
+      const antes = P.indicadoresKmi()[0].kmEmDia;
+      window.__simularPatrulha();
+      await new Promise((r) => setTimeout(r, 2500));
+      return { antes };
+    });
+    await pk.click('#trilha-painel button:has-text("Encerrar patrulha")');
+    await pk.waitForTimeout(300);
+    const patDepois = await pk.evaluate(async () => { const { estado } = await import('./js/store.js'); const P = await import('./js/planos.js'); const novos = estado.dados.inspecoesTrecho.filter((i) => i.tipo === 'PATRULHA' && !i.sintetico); return { n: novos.length, km: novos.reduce((t, i) => t + i.km, 0), completas: novos.filter((i) => i.completa).length, kmEmDia: P.indicadoresKmi()[0].kmEmDia }; });
+    const temCompletar = await pk.locator('#sheet button:has-text("Completar como inspeção")').count();
+    registrar('PAT-1', 'Patrulha registra km por trecho, não conta no KMI e oferece completar como inspeção', patDepois.n >= 1 && patDepois.completas === 0 && Math.abs(patDepois.kmEmDia - patrulha.antes) < 0.01 && temCompletar > 0,
+      `${patDepois.n} trecho(s) · ${patDepois.km.toFixed(2)} km patrulhados · ${temCompletar} com cobertura para virar inspeção`);
+    await pk.click('#sheet-fechar');
+
+    // Drone: importa o log de voo de exemplo
+    await pk.evaluate(async () => (await import('./js/trilha.js')).abrirTrecho('ALM-07-T03'));
+    const [fc] = await Promise.all([pk.waitForEvent('filechooser'), pk.click('#sheet button:has-text("Importar voo de drone")')]);
+    await fc.setFiles(path.join(RAIZ, 'app', 'modelos', 'exemplo-voo-drone-ALM-07-T03.kml'));
+    await pk.waitForSelector('#sheet-titulo:has-text("Voo de drone")');
+    for (const g of await pk.locator('#sheet .segmentado').all()) await g.locator('.segmentado__op').first().click();
+    await pk.setInputFiles('#sheet .fotos input[type=file]', FOTO);
+    await pk.waitForTimeout(500);
+    const textoCob = await pk.locator('#sheet .geo').first().innerText();
+    await pk.click('#sheet-rodape button:has-text("Salvar inspeção do trecho")');
+    await pk.waitForTimeout(300);
+    const drone = await pk.evaluate(async () => (await import('./js/planos.js')).inspecoesDoTrecho('ALM-07-T03')[0]);
+    registrar('DRONE-1', 'Voo de drone importado (KML) vira inspeção com cobertura calculada', drone.tipo === 'DRONE' && drone.completa, `${textoCob.split('.')[0]} · tipo ${drone.tipo}`);
+
+    // Áreas de plano e eficácia (gestor)
+    await entrar(pk, 'Gestão de Planejamento');
+    const areaRes = await pk.evaluate(async () => {
+      const P = await import('./js/planos.js');
+      const out = {};
+      const t = P.trechos()[5]; const c = t.coords[0];
+      try { P.criarArea({ tipoPlano: 'EVENTO', nome: 'Show sem data', geometria: { tipo: 'circulo', centro: c, raioM: 300 } }); out.semData = 'ACEITO'; } catch (e) { out.semData = e.message; }
+      try { P.criarArea({ tipoPlano: 'ESCOLA', nome: 'Escola longe', geometria: { tipo: 'circulo', centro: [-15.70, -47.80], raioM: 100 } }); out.longe = 'ACEITO'; } catch (e) { out.longe = e.message; }
+      const a = P.criarArea({ tipoPlano: 'ESCOLA', nome: 'Escola de teste', geometria: { tipo: 'circulo', centro: c, raioM: 200 } });
+      out.trechos = P.trechos().filter((x) => P.areasDoTrecho(x.id).includes(a)).length;
+      out.exig = P.exigencia(t).periodicidade;
+      return out;
+    });
+    registrar('PLANO-1', 'Área de escola (raio) entra no plano com periodicidade própria; evento sem data e área fora da rede são recusados', areaRes.trechos >= 1 && areaRes.exig <= 60 && /início e fim/.test(areaRes.semData) && /nenhum trecho/.test(areaRes.longe),
+      `${areaRes.trechos} trecho(s) na área · exigência ${areaRes.exig} dias`);
+
+    await irPara(pk, 'plano');
+    await pk.setInputFiles('#view-plano input[type=file] >> nth=1', path.join(RAIZ, 'app', 'modelos', 'template-ocorrencias.csv'));
+    await pk.waitForTimeout(400);
+    const efic = await pk.evaluate(async (id) => {
+      const E = await import('./js/eficacia.js'); const P = await import('./js/planos.js'); const { estado } = await import('./js/store.js');
+      const imp = estado.dados.ocorrencias.filter((o) => o.origem === 'template-ocorrencias.csv');
+      const desc = imp.find((o) => o.causa === 'DESC');
+      const t = P.trechoPorId(id); const m = t.coords[Math.floor(t.coords.length / 2)];
+      const recente = E.atribuir({ dataHora: new Date().toISOString(), lat: m[0], lon: m[1], causa: 'EST' });
+      const ind = E.indicadoresEficacia();
+      const soma = Object.values(ind.porPortao).reduce((s, x) => s + x.qtd, 0);
+      return { importadas: imp.length, desc: desc ? E.atribuir(desc).portao : null, recente: recente.portao, soma, total: ind.ocorrencias.length, eficacia: ind.eficacia };
+    }, alvoT);
+    registrar('EFIC-1', 'Ocorrências importadas e atribuídas: não evitável fica fora; trecho recém-inspecionado não cai em "Plano"', efic.importadas === 2 && efic.desc === 'EXCLUIDA' && efic.recente !== 'PLANO' && efic.soma === efic.total,
+      `${efic.importadas} importadas · descarga → ${efic.desc} · desarme estrutural no trecho inspecionado hoje → ${efic.recente} · eficácia ${(efic.eficacia * 100).toFixed(0)}%`);
+    await irPara(pk, 'painel');
+    registrar('FUNIL-1', 'Painel mostra o funil Plano → Inspeção → Programação → Eficácia', await pk.locator('.funil .kpi').count() === 4, (await pk.locator('.funil .kpi__rotulo').allInnerTexts()).join(' · '));
+    await pk.screenshot({ path: path.join(SAIDA, 'funil.png'), fullPage: true });
+    await ck.close();
+
     // ================= Trabalho offline por alimentador =================
     const ctxo = await browser.newContext({ viewport: { width: 1280, height: 820 } });
     const po = await ctxo.newPage();

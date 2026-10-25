@@ -46,6 +46,13 @@ export function aderenciaSemana(semana, ref = hojeISO()) {
   return { semana, itens: c.itens.length, vencidos, conformes, pct: vencidos ? conformes / vencidos : null, motivos, custo: c.itens.reduce((s, i) => s + (i.custo || 0), 0) };
 }
 
+/** Aderência acumulada das últimas N semanas congeladas (para o funil do Painel). */
+export function aderenciaUltimas(n = 6) {
+  const ult = Object.keys(estado.dados.congelamentos || {}).sort().slice(-n).map((s) => aderenciaSemana(s)).filter((x) => x?.vencidos);
+  const v = ult.reduce((t, x) => t + x.vencidos, 0), c = ult.reduce((t, x) => t + x.conformes, 0);
+  return v ? c / v : null;
+}
+
 /** Prazo dos críticos (SLA): defeitos A executados em até N dias da identificação. */
 export function slaCriticos(ref = hojeISO()) {
   const as = estado.dados.defeitos.filter((f) => f.severidade === 'A' && !['REJEITADO', 'CANCELADO'].includes(f.status));

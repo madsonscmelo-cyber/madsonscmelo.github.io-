@@ -475,3 +475,43 @@ select.campo__input { width: auto; max-width: 100%; }
 @media (max-width: 720px) { .param-salvar { grid-template-columns: 1fr; } }
 .tabela--param td { padding: .25rem; }
 .tabela--param .campo__input { min-width: 90px; }
+
+/* ---------- Trechos, áreas de plano, trajeto ---------- */
+.tronco--emdia { stroke: #2e7d32; stroke-opacity: .85; }
+.tronco--vencendo { stroke: #ef6c00; stroke-opacity: .9; }
+.tronco--vencido { stroke: #6a1b9a; stroke-opacity: .9; stroke-dasharray: 10 6; }
+.leg-linha { display: inline-block; width: 18px; height: 4px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+.leg-linha--emdia { background: #2e7d32; }
+.leg-linha--vencendo { background: #ef6c00; }
+.leg-linha--vencido { background: repeating-linear-gradient(90deg, #6a1b9a 0 6px, transparent 6px 9px); }
+.area-plano { stroke-width: 2; fill-opacity: .07; stroke-dasharray: 4 4; }
+.area-plano--ouro { stroke: #b8860b; fill: #ffd54f; }
+.area-plano--urbano { stroke: #546e7a; fill: #90a4ae; }
+.area-plano--escola { stroke: #1565c0; fill: #64b5f6; fill-opacity: .15; }
+.area-plano--evento { stroke: #c2185b; fill: #f48fb1; fill-opacity: .14; }
+.area-plano--especial { stroke: #00897b; fill: #80cbc4; }
+.trilha { stroke: #d81b60; stroke-width: 5; stroke-opacity: .9; fill: none; }
+.desenho-vertice { stroke: #fff; fill: #1a73e8; fill-opacity: 1; }
+.desenho-area { stroke: #1a73e8; fill: #1a73e8; fill-opacity: .12; stroke-dasharray: 6 4; }
+.trilha-painel { left: 50%; transform: translateX(-50%); bottom: 4.2rem; width: min(440px, calc(100vw - 1.5rem)); display: grid; gap: .45rem; z-index: 1100; }
+.trilha__tit { display: flex; align-items: center; gap: .5rem; }
+.rec { width: 12px; height: 12px; border-radius: 50%; background: #d81b60; animation: pulso-rec 1.2s infinite; }
+@keyframes pulso-rec { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .rec { animation: none; } }
+.chip--tr-emdia { background: var(--primaria-suave); color: var(--primaria); }
+.chip--tr-vencendo { background: #fff3cd; color: #4a3500; }
+.chip--tr-vencido { background: var(--insp-vencida); color: #fff; border-color: transparent; }
+.chip--plano-ouro { background: #fff8e1; color: #6d4c00; }
+.chip--plano-escola { background: #e3f2fd; color: #0d3c6e; }
+.chip--plano-evento { background: #fce4ec; color: #880e4f; }
+.chip--plano-urbano, .chip--plano-especial { background: var(--superficie-2); }
+.chip--portao-plano { background: #ede7f6; color: #3d1d7a; }
+.chip--portao-inspecao { background: #fff3cd; color: #4a3500; }
+.chip--portao-programacao { background: #e3f2fd; color: #0d3c6e; }
+.chip--portao-manutencao { background: #fdecea; color: #7a1010; }
+.chip--portao-excluida, .chip--portao-sem_local, .chip--portao-sem_causa { background: var(--superficie-2); color: var(--texto-2); }
+.trechos-sel { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .5rem; }
+.funil .kpis { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+
+.funil .barras__linha { grid-template-columns: minmax(150px, 40%) 1fr 8.5rem; }
+.funil .barras__val { font-size: .8rem; }

@@ -81,8 +81,12 @@ export const PARAM = {
   janelaProgramacaoDias: 30,
   horasDiaEquipe: 8,
   diasUteisSemana: 5,
+  coberturaMinPct: 95,
+  faixaTrilhaM: 30,
+  raioEscolaM: 200,
+  raioAtribuicaoM: 300,
   sla: { A: 7, B: 30, C: 90 },
-  metas: { aderenciaPlano: 0.9, aderenciaProgramacao: 0.9, slaCriticos: 1 },
+  metas: { aderenciaPlano: 0.95, completude: 0.95, aderenciaProgramacao: 0.9, slaCriticos: 1, eficacia: 0.9 },
 };
 
 // Indicadores de continuidade sintéticos por conjunto (DEC/FEC em horas/vezes, 12 meses).

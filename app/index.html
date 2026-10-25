@@ -32,6 +32,8 @@
       <div id="mapa" aria-label="Mapa da rede"></div>
       <div id="mapa-ctrl" class="mapa-ctrl"></div>
       <div id="mapa-topo" class="mapa-topo"></div>
+      <div id="trilha-painel" class="flutuante trilha-painel" hidden></div>
+      <div id="desenho-painel" class="flutuante trilha-painel" hidden></div>
       <div id="painel-filtros" class="flutuante filtros-mapa" hidden></div>
       <details class="legenda">
         <summary>Legenda</summary>
@@ -45,6 +47,10 @@
         <div class="legenda__grupo"><strong>Situação</strong>
           <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado</span>
           <span class="leg"><i class="mk mk--poste mk--ok"></i>Em dia</span></div>
+        <div class="legenda__grupo"><strong>Trecho (plano por km)</strong>
+          <span class="leg"><i class="leg-linha leg-linha--emdia"></i>Em dia</span>
+          <span class="leg"><i class="leg-linha leg-linha--vencendo"></i>Vence em 15 dias</span>
+          <span class="leg"><i class="leg-linha leg-linha--vencido"></i>Vencido</span></div>
         <div class="legenda__grupo"><strong>Ativo</strong>
           <span class="leg"><i class="mk mk--poste mk--neutro"></i>Poste</span>
           <span class="leg"><i class="mk mk--trafo mk--neutro"></i>Trafo</span>

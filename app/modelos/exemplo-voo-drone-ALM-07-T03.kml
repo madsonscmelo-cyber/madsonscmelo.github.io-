@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Voo de drone (exemplo fictício) - ALM-07-T03</name><Placemark><name>Trajeto do voo</name><LineString><coordinates>-48.056373,-15.835437,60 -48.054849,-15.835148,60 -48.053484,-15.834859,60 -48.051960,-15.834570,60 -48.050790,-15.834020,60 -48.049460,-15.833470,60 -48.048290,-15.832920,60 -48.046960,-15.832370,60</coordinates></LineString></Placemark></Document></kml>

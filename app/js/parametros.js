@@ -55,8 +55,31 @@ function padrao() {
   const base = { ESTRUTURAL: 30000, VEGETACAO: 9000, ROCADA: 6000, ELETRICO: 22000, FAUNA: 1500 };
   for (const m of [mesISO(0), mesISO(1), mesISO(2)]) for (const [categoria, valor] of Object.entries(base)) orcamento.push({ mes: m, categoria, valor });
   return {
-    geral: { raioValidacaoM: PARAM.raioValidacaoM, raioAlertaM: PARAM.raioAlertaM, janelaProgramacaoDias: PARAM.janelaProgramacaoDias, horasDiaEquipe: PARAM.horasDiaEquipe, diasUteisSemana: PARAM.diasUteisSemana },
-    metas: { aderenciaPlano: 90, aderenciaProgramacao: 90, slaCriticos: 100, slaA: 7, slaB: 30, slaC: 90 },
+    geral: { raioValidacaoM: PARAM.raioValidacaoM, raioAlertaM: PARAM.raioAlertaM, janelaProgramacaoDias: PARAM.janelaProgramacaoDias, horasDiaEquipe: PARAM.horasDiaEquipe, diasUteisSemana: PARAM.diasUteisSemana,
+      coberturaMinPct: 95, faixaTrilhaM: 30, raioEscolaM: 200, raioAtribuicaoM: 300 },
+    metas: { aderenciaPlano: 95, completude: 95, aderenciaProgramacao: 90, slaCriticos: 100, eficacia: 90, slaA: 7, slaB: 30, slaC: 90 },
+    tiposPlano: [
+      ['BASE', 'Plano base (rede inteira)', 180, 'Periodicidade padrão de toda a rede'],
+      ['OURO', 'Trecho ouro', 60, 'Cargas críticas e maior CHI'],
+      ['URBANO', 'Área urbana', 90, 'Polígono urbano'],
+      ['ESCOLA', 'Segurança — escolas', 60, 'Raio em volta de escolas; risco a terceiros é severidade A'],
+      ['EVENTO', 'Evento', 30, 'Inspecionar até N dias antes do início; vale só entre início e fim'],
+      ['ESPECIAL', 'Plano especial', 120, 'Livre'],
+    ].map(([id, nome, periodicidadeDias, descricao]) => ({ id, nome, periodicidadeDias, descricao })),
+    causas: [
+      ['VEG', 'Vegetação / árvore na rede', true, 'VEGETACAO', 180],
+      ['FAIXA', 'Vegetação baixa / queimada na faixa', true, 'ROCADA', 180],
+      ['EST', 'Estrutura (cruzeta, poste, isolador)', true, 'ESTRUTURAL', 180],
+      ['CONEX', 'Conexão / condutor', true, 'ELETRICO', 180],
+      ['TRAFO', 'Falha de transformador', true, 'ELETRICO', 90],
+      ['CHAVE', 'Chave / elo fusível', true, 'ELETRICO', 90],
+      ['FAUNA', 'Animal / ninho', true, 'FAUNA', 90],
+      ['DESC', 'Descarga atmosférica', false, 'NENHUMA', 0],
+      ['ABAL', 'Abalroamento de poste', false, 'NENHUMA', 0],
+      ['VAND', 'Vandalismo / furto', false, 'NENHUMA', 0],
+      ['OBJ', 'Pipa / objeto estranho', false, 'NENHUMA', 0],
+      ['NID', 'Causa não identificada', false, 'NENHUMA', 0],
+    ].map(([codigo, nome, evitavel, atividade, janelaDias]) => ({ codigo, nome, evitavel, atividade, janelaDias })),
     risco: copia(RISCO),
     ranking: { inspecaoBase: PONTOS.inspecaoBase, inspecaoAtrasada: PONTOS.inspecaoAtrasada, defeitoValidadoA: 10, defeitoValidadoB: 6, defeitoValidadoC: 3, defeitoRejeitado: -3, execucaoA: 15, execucaoB: 9, execucaoC: 5 },
     criterios: copia(CRITERIOS),
@@ -110,12 +133,25 @@ export const ESQUEMA = {
     { chave: 'periodicidadeDias', rotulo: 'Periodicidade (dias)', tipo: 'numero', min: 1 },
     { chave: 'peso', rotulo: 'Peso', tipo: 'numero', min: 0 },
     { chave: 'tipos', rotulo: 'Tipos de ativo', tipo: 'multi', opcoes: opc(TIPOS_ATIVO) }] },
+  tiposPlano: { titulo: 'Tipos de plano', tipo: 'tabela', editores: ADM_GESTOR, ajuda: 'Periodicidade de inspeção de cada tipo de plano (no evento: quantos dias antes do início a inspeção precisa estar feita).', campos: [
+    { chave: 'id', rotulo: 'Código', tipo: 'texto', obrigatorio: true },
+    { chave: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true },
+    { chave: 'periodicidadeDias', rotulo: 'Periodicidade (dias)', tipo: 'numero', min: 1 },
+    { chave: 'descricao', rotulo: 'Descrição', tipo: 'texto' }] },
+  causas: { titulo: 'Causas de ocorrência × atividade', tipo: 'tabela', editores: ADM, ajuda: 'Base da eficácia: só causas evitáveis contam, contra a atividade relacionada e dentro da janela (dias após a inspeção/serviço).', campos: [
+    { chave: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true },
+    { chave: 'nome', rotulo: 'Causa', tipo: 'texto', obrigatorio: true },
+    { chave: 'evitavel', rotulo: 'Evitável', tipo: 'bool' },
+    { chave: 'atividade', rotulo: 'Atividade relacionada', tipo: 'selecao', opcoes: () => [...Object.entries(CATEGORIAS), ['NENHUMA', 'Nenhuma']] },
+    { chave: 'janelaDias', rotulo: 'Janela (dias)', tipo: 'numero', min: 0, max: 730 }] },
   motivos: { titulo: 'Motivos de reprogramação', tipo: 'tabela', editores: ADM_GESTOR, campos: [
     { chave: 'id', rotulo: 'Código', tipo: 'texto', obrigatorio: true },
     { chave: 'nome', rotulo: 'Motivo', tipo: 'texto', obrigatorio: true }] },
   metas: { titulo: 'Metas e prazos', tipo: 'objeto', editores: ADM_GESTOR, campos: [
     { chave: 'aderenciaPlano', rotulo: 'Meta de aderência ao plano (%)', tipo: 'numero', min: 0, max: 100 },
+    { chave: 'completude', rotulo: 'Meta de inspeções completas (%)', tipo: 'numero', min: 0, max: 100 },
     { chave: 'aderenciaProgramacao', rotulo: 'Meta de aderência à programação (%)', tipo: 'numero', min: 0, max: 100 },
+    { chave: 'eficacia', rotulo: 'Meta de eficácia (%)', tipo: 'numero', min: 0, max: 100 },
     { chave: 'slaCriticos', rotulo: 'Meta de defeitos A no prazo (%)', tipo: 'numero', min: 0, max: 100 },
     { chave: 'slaA', rotulo: 'Prazo para executar defeito A (dias)', tipo: 'numero', min: 1 },
     { chave: 'slaB', rotulo: 'Prazo para executar defeito B (dias)', tipo: 'numero', min: 1 },
@@ -125,7 +161,11 @@ export const ESQUEMA = {
     { chave: 'raioAlertaM', rotulo: 'Raio do alerta de proximidade (m)', tipo: 'numero', min: 30, max: 2000 },
     { chave: 'janelaProgramacaoDias', rotulo: 'Antecedência para gerar inspeções (dias)', tipo: 'numero', min: 1, max: 120 },
     { chave: 'horasDiaEquipe', rotulo: 'Horas produtivas por equipe/dia', tipo: 'numero', min: 1, max: 12 },
-    { chave: 'diasUteisSemana', rotulo: 'Dias úteis na semana', tipo: 'numero', min: 1, max: 7 }] },
+    { chave: 'diasUteisSemana', rotulo: 'Dias úteis na semana', tipo: 'numero', min: 1, max: 7 },
+    { chave: 'coberturaMinPct', rotulo: 'Cobertura mínima do trecho para inspeção completa (%)', tipo: 'numero', min: 50, max: 100 },
+    { chave: 'faixaTrilhaM', rotulo: 'Faixa do trajeto em volta da rede (m)', tipo: 'numero', min: 5, max: 200 },
+    { chave: 'raioEscolaM', rotulo: 'Raio padrão em volta de escolas (m)', tipo: 'numero', min: 50, max: 2000 },
+    { chave: 'raioAtribuicaoM', rotulo: 'Distância máxima para ligar ocorrência a trecho/ativo (m)', tipo: 'numero', min: 50, max: 2000 }] },
   risco: { titulo: 'Pesos do score de risco', tipo: 'objeto', editores: ADM, campos: Object.keys(RISCO).map((k) => ({ chave: k, rotulo: k, tipo: 'numero', min: 0 })) },
   ranking: { titulo: 'Pontuação do ranking', tipo: 'objeto', editores: ADM, campos: Object.keys(PADRAO.ranking).map((k) => ({ chave: k, rotulo: k, tipo: 'numero' })) },
   seguranca: { titulo: 'Política de acesso', tipo: 'objeto', editores: ADM, ajuda: 'Limites mínimos protegidos: não é possível afrouxar abaixo do permitido.', campos: [
@@ -143,7 +183,9 @@ const repo = () => (estado.dados.parametros ||= { versoes: [] });
 /** Valor vigente de um grupo numa data (padrão: hoje). */
 export function valor(grupo, data = hojeISO()) {
   const v = repo().versoes.filter((x) => x.grupo === grupo && x.vigencia <= data).sort((a, b) => (a.vigencia === b.vigencia ? a.em.localeCompare(b.em) : a.vigencia.localeCompare(b.vigencia))).at(-1);
-  return copia(v ? v.valores : PADRAO[grupo]);
+  if (!v) return copia(PADRAO[grupo]);
+  // Grupos de campos: completa com o padrão campos criados depois da versão salva.
+  return ESQUEMA[grupo]?.tipo === 'objeto' ? { ...copia(PADRAO[grupo]), ...copia(v.valores) } : copia(v.valores);
 }
 export const versoes = (grupo) => repo().versoes.filter((x) => x.grupo === grupo).sort((a, b) => b.em.localeCompare(a.em));
 export const podeEditar = (grupo) => ESQUEMA[grupo]?.editores.includes(estado.usuario?.perfil);
@@ -214,7 +256,7 @@ function resumoMudanca(esq, antes, depois) {
 /** Aplica os valores vigentes hoje nos objetos de domínio usados pelo app. */
 export function aplicarParametros() {
   const g = valor('geral'), m = valor('metas');
-  Object.assign(PARAM, g, { sla: { A: m.slaA, B: m.slaB, C: m.slaC }, metas: { aderenciaPlano: m.aderenciaPlano / 100, aderenciaProgramacao: m.aderenciaProgramacao / 100, slaCriticos: m.slaCriticos / 100 } });
+  Object.assign(PARAM, g, { sla: { A: m.slaA, B: m.slaB, C: m.slaC }, metas: { aderenciaPlano: m.aderenciaPlano / 100, completude: m.completude / 100, aderenciaProgramacao: m.aderenciaProgramacao / 100, slaCriticos: m.slaCriticos / 100, eficacia: m.eficacia / 100 } });
   Object.assign(RISCO, valor('risco'));
   const r = valor('ranking');
   Object.assign(PONTOS, { inspecaoBase: r.inspecaoBase, inspecaoAtrasada: r.inspecaoAtrasada, defeitoRejeitado: r.defeitoRejeitado,

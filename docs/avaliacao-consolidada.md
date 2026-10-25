@@ -125,3 +125,49 @@ Cada proposta foi cruzada com usabilidade (7 leis), acessibilidade, cores, desem
 | Tempo do gestor até a primeira ação útil ao abrir o app | Medir antes e depois; meta < 10 s |
 | Teste com 5 usuários de campo (encontra a maior parte dos problemas de usabilidade [PROVÁVEL]) | ≥ 4 de 5 concluem "achar a pendência do dia" sem ajuda |
 | Testes automatizados | Continuam 100% aprovados |
+
+---
+
+## 6. Execução do plano (25/10/2026) — o que foi feito e o que mudou nas medidas
+
+As três semanas do plano foram implementadas e publicadas. Itens adiados de propósito continuam adiados (ver 6.3).
+
+### 6.1 Medidas antes × depois
+
+| Medida | Meta (seção 5) | Antes | Depois | Situação |
+|---|---|---|---|---|
+| Acessibilidade (axe-core, WCAG 2.1 AA + boas práticas) | 0 crítico, 0 sério | 77 críticas, 13 sérias, 6 moderadas, 1 menor (10 telas) | **0 violações em 16 telas** (inclui Hoje, abas do painel, busca, mapa por visão, modo sol) | ✅ [CERTEZA] |
+| Paleta dos estados no mapa (validador dataviz) | ΔE ≥ 8, ou ≥ 6 com codificação secundária | FALHA: vermelho × verde ΔE 4,2 (deuteranopia) | **Pior par 11,3** (normal) · modo sol: 7,5 com letra/ícone no marcador | ✅ [CERTEZA] |
+| Lighthouse celular, site publicado | Desempenho ≥ 90; LCP ≤ 2,5 s | 89 · LCP 3,2 s | **98–99 · LCP 2,0–2,1 s** (3 execuções) · boas práticas 100 | ✅ [CERTEZA] |
+| Testes automatizados | 100% aprovados | 47/47 | **60/60** (13 novos: Hoje, fluxo, funil clicável, tendência, mapa por visão, busca, modo sol, agenda no celular) | ✅ [CERTEZA] |
+| Tempo do gestor até a primeira ação útil | < 10 s | — | Abre direto em Hoje com 3 decisões e o botão da ação [PROVÁVEL] | ⏳ medir com usuários |
+| Teste com 5 usuários de campo | ≥ 4 de 5 | — | — | ⏳ não feito — depende do piloto |
+
+Evidências: `docs/evidencias/axe-16-telas.json`, `docs/evidencias/lighthouse-depois.json`.
+
+**O ganho de LCP não veio de minificação.** Os quadros do mapa carregavam atrás da tela de login e viravam o maior elemento da página. Agora o fundo de ruas só carrega quando o mapa é aberto — economiza dados móveis em campo e resolveu o LCP sem etapa de build. A minificação continua recomendada para o ambiente de produção, mas deixou de ser necessária para a meta.
+
+### 6.2 Entregue
+
+| Semana | Entrega |
+|---|---|
+| 1 | Paleta validada + letra/ícone nos marcadores (! A, B, C, V, I, P, ✓) · acessibilidade (listas nomeadas, tabelas roláveis com teclado e nome único, login em região) · **linha do tempo do defeito** · **tempo por etapa** (mediana, conta o que está parado) · **idade da carteira** · **taxa de achado por km** (por equipe, alerta abaixo da metade da média) · **CHI em risco (estimado)** com duração média parametrizável |
+| 2 | **Tela Hoje** (gestor/supervisor: até 3 decisões; equipe: rota do dia; auditor: integridade do log, negações, parâmetros alterados) · **funil em duas faixas** (km e defeitos) ligadas pela taxa de achado, etapa → lista filtrada, tabela alternativa · **mapa com uma visão por vez** e legenda adaptada · **modo sol** · **busca única** (Ctrl+K) · carregando e vibração |
+| 3 | **Foto semanal** dos indicadores (12 semanas) · **painel enxuto** (4 indicadores 2×2 com tendência e variação; resto em abas; exportar no fim) · **agenda por dia** na Programação do celular · número sempre no lugar do número · topo com ícone + contador e iniciais · selo DEMO no topo · preconnect |
+
+### 6.3 Adiado e por quê (sem mudança de posição)
+
+| Item | Motivo |
+|---|---|
+| Arrastar-e-soltar na programação | WCAG 2.2 (2.5.7) exige alternativa sem arrastar; no celular a agenda por dia com "tocar e escolher" já resolve. Avaliar como atalho de computador depois do piloto |
+| R$ por CHI evitado | A probabilidade de falha por tipo de defeito não está calibrada. O app mostra **CHI em risco (estimado)** — exposição, não previsão — e diz isso na tela |
+
+### 6.4 Riscos que continuam abertos
+
+| Risco | Por quê importa | O que fazer |
+|---|---|---|
+| **Tendência com semanas sintéticas** | As 11 semanas anteriores à primeira foto real são geradas para a demonstração. Em produção, o histórico começa vazio | A tela avisa. No ambiente protegido, carregar o histórico real dos indicadores ou aceitar 12 semanas até a tendência ter valor |
+| **Taxa de achado depende de "equipe que identificou"** | Defeito lançado pelo supervisor em nome da equipe distorce a taxa | Exigir a equipe de origem no lançamento e auditar no piloto |
+| **CHI em risco usa duração média única** | 2,5 h é [SUPOSIÇÃO]; o real varia por conjunto e tipo de falha | Trocar pelo TMA por conjunto quando o OMS estiver integrado |
+| **Cartões do Hoje são regras fixas com peso** | A ordem reflete o meu julgamento de prioridade, não o seu | Revisar os pesos com o time no piloto; se divergir, levar os pesos para Parâmetros |
+| Teste com usuários não feito | Medida de usabilidade real só com gente de campo | 5 usuários × tarefa "achar a pendência do dia", antes de ampliar |

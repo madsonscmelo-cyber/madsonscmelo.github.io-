@@ -8,6 +8,9 @@ import { trechos as trechosInspecao, situacaoTrecho, areas, areaAtiva, tipoPlano
 const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 let mapa, camadaRuas, grupoAtivos, grupoTrechos, grupoAreas, grupoTrilha, grupoDesenho, marcadorUsuario, circuloUsuario, retangulo;
 let pontosDesenho = [];
+// Fundo de ruas só carrega quando o mapa aparece: atrás da tela de login ou da tela Hoje ele só gastava dados
+// e virava o "maior elemento" da página (LCP 4,3 s no celular).
+let fundoLiberado = false, fundoLeve = false;
 let modo = null, cantoA = null, retornos = {};
 
 export const filtros = {
@@ -58,7 +61,7 @@ export function iniciarMapa(container, cb) {
   camadaRuas = L.tileLayer(URL_TILES, {
     maxZoom: 19, crossOrigin: 'anonymous',
     attribution: '&copy; OpenStreetMap',
-  }).addTo(mapa);
+  });
   grupoAreas = L.layerGroup().addTo(mapa);
   grupoTrechos = L.layerGroup().addTo(mapa);
   grupoTrilha = L.layerGroup().addTo(mapa);
@@ -216,8 +219,15 @@ export const urlTile = (z, x, y) => URL_TILES.replace('{z}', z).replace('{x}', x
 
 /** Mapa leve: só a rede desenhada, sem fundo de ruas (não consome internet). */
 export function definirFundo(leve) {
+  fundoLeve = !!leve;
   if (!mapa) return;
-  if (leve && mapa.hasLayer(camadaRuas)) camadaRuas.remove();
-  if (!leve && !mapa.hasLayer(camadaRuas)) camadaRuas.addTo(mapa);
-  container().classList.toggle('mapa--leve', leve);
+  if ((fundoLeve || !fundoLiberado) && mapa.hasLayer(camadaRuas)) camadaRuas.remove();
+  if (!fundoLeve && fundoLiberado && !mapa.hasLayer(camadaRuas)) camadaRuas.addTo(mapa);
+  container().classList.toggle('mapa--leve', fundoLeve);
+}
+/** Chamado quando a tela do mapa é aberta pela primeira vez. */
+export function liberarFundo() {
+  if (fundoLiberado) return;
+  fundoLiberado = true;
+  definirFundo(fundoLeve);
 }

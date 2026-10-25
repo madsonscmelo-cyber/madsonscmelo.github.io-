@@ -117,7 +117,7 @@ function mostrar(id) {
     raiz.replaceChildren(el('p', { class: 'carregando', role: 'status', text: 'Carregando…' }));
     requestAnimationFrame(() => setTimeout(() => { raiz.removeAttribute('aria-busy'); if (viewAtual === id) renderizarAtual(); }, 0));
   } else renderizarAtual();
-  if (id === 'mapa') setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 30);
+  if (id === 'mapa') { mapa.liberarFundo(); setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 30); }
   if (id === 'acesso') telaAcesso($('#view-acesso'));
   if (id === 'parametros') telaParametros($('#view-parametros'));
   return true;

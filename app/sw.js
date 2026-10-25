@@ -1,5 +1,5 @@
 // Service worker: app shell em network-first (pega atualização quando há rede) e tiles em cache-first.
-const VERSAO = 'redeviva-v7';
+const VERSAO = 'redeviva-v8';
 const TILES = 'redeviva-tiles';
 const PACOTES = 'redeviva-pacotes'; // mapas dos pacotes offline: nunca aparados automaticamente
 const MAX_TILES = 1500;

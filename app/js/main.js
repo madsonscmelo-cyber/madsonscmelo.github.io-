@@ -2,7 +2,7 @@
 import { el, $, $$, toast, distanciaM, hojeISO, somarDias, fmtDataHora } from './util.js';
 import { estado, eventos, persistir, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId, rascunhosDoUsuario, resumoFila } from './store.js';
 import { abrirTrabalhoOffline, config as configOffline, definirMapaLeve } from './offline.js';
-import { validarConfig } from './config.js';
+import { validarConfig, CONFIG } from './config.js';
 import { PERFIS, TIPOS_EQUIPE, TIPOS_ATIVO, PARAM, pendenciasDaEquipe } from './dominio.js';
 import { aplicarParametros } from './parametros.js';
 import { telaParametros } from './parametros-ui.js';
@@ -460,6 +460,21 @@ async function iniciar() {
   window.addEventListener('unhandledrejection', (e) => logar({ categoria: 'SISTEMA', acao: 'ERRO_APLICACAO', resultado: 'ERRO', detalhe: { mensagem: String(e.reason?.message || e.reason) } }));
   logar({ categoria: 'SISTEMA', acao: 'APP_INICIADO', detalhe: { instalado: matchMedia('(display-mode: standalone)').matches } });
 
+  // Demonstração: link de recuperação (…/app/?restaurar-demo) zera os dados e senhas deste aparelho.
+  // Sem servidor não existe "esqueci a senha"; em produção quem resolve é o SSO corporativo.
+  const url = new URL(location.href);
+  if (CONFIG.modo === 'demo' && url.searchParams.has('restaurar-demo')) {
+    url.searchParams.delete('restaurar-demo');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+    if (confirm('Restaurar a demonstração neste aparelho? Todas as matrículas voltam para a senha inicial Rede@2026 e os registros de teste são apagados (o log de auditoria é mantido).')) {
+      logar({ categoria: 'SEGURANCA', acao: 'DEMO_RESTAURADA_POR_LINK' });
+      try { sessionStorage.clear(); } catch { /* sem storage */ }
+      await resetarDados();
+      telaLogin(entrar);
+      toast('Demonstração restaurada. Entre com a matrícula e a senha inicial Rede@2026.', { tipo: 'ok', duracao: 10000 });
+      return;
+    }
+  }
   if (retomarSessao()) aposEntrar(); else telaLogin(entrar);
 }
 

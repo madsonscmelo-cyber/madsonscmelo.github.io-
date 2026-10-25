@@ -1,0 +1,85 @@
+{
+ "login": [
+  {
+   "id": "region",
+   "impact": "moderate",
+   "n": 6,
+   "help": "All page content should be contained by landmarks",
+   "ex": [
+    ".login__marca ::   Some page content is not contained by landmarks",
+    ".aviso-demo ::   Some page content is not contained by landmarks"
+   ]
+  }
+ ],
+ "mapa (equipe)": [],
+ "ficha do ativo": [],
+ "inspeção etapa 1": [],
+ "defeitos": [],
+ "programacao": [
+  {
+   "id": "scrollable-region-focusable",
+   "impact": "serious",
+   "n": 1,
+   "help": "Scrollable region must have keyboard access",
+   "ex": [
+    ".bloco:nth-child(4) > .tabela-wrap ::   Element should have focusable content"
+   ]
+  }
+ ],
+ "painel": [
+  {
+   "id": "scrollable-region-focusable",
+   "impact": "serious",
+   "n": 8,
+   "help": "Scrollable region must have keyboard access",
+   "ex": [
+    "#view-painel > .bloco:nth-child(4) > .tabela-wrap ::   Element should have focusable content",
+    ".grade-2 > .bloco:nth-child(4) > .tabela-wrap ::   Element should have focusable content"
+   ]
+  }
+ ],
+ "plano": [
+  {
+   "id": "scrollable-region-focusable",
+   "impact": "serious",
+   "n": 3,
+   "help": "Scrollable region must have keyboard access",
+   "ex": [
+    ".bloco:nth-child(3) > .tabela-wrap ::   Element should have focusable content",
+    "#view-plano > .bloco:nth-child(5) > .tabela-wrap ::   Element should have focusable content"
+   ]
+  },
+  {
+   "id": "select-name",
+   "impact": "critical",
+   "n": 77,
+   "help": "Select element must have an accessible name",
+   "ex": [
+    "#view-plano > .bloco:nth-child(6) > .filtros > select:nth-child(1) ::   Element does not have an implicit (wrapped) <label>",
+    "#view-plano > .bloco:nth-child(6) > .filtros > select:nth-child(2) ::   Element does not have an implicit (wrapped) <label>"
+   ]
+  }
+ ],
+ "acesso": [
+  {
+   "id": "scrollable-region-focusable",
+   "impact": "serious",
+   "n": 1,
+   "help": "Scrollable region must have keyboard access",
+   "ex": [
+    "#view-acesso > div:nth-child(3) > .tabela-wrap ::   Element should have focusable content"
+   ]
+  }
+ ],
+ "parametros": [
+  {
+   "id": "empty-table-header",
+   "impact": "minor",
+   "n": 1,
+   "help": "Table header text should not be empty",
+   "ex": [
+    ".tabela--param > thead > tr > th:nth-child(4) ::   Element does not have text that is visible to screen readers"
+   ]
+  }
+ ]
+}

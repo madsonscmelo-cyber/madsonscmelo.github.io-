@@ -21,18 +21,23 @@ Legenda: ✅ passou com evidência · ⚠️ problema · ❓ verificar fora do c
 
 ## Resultados
 
-### Fase 1 — Transporte e cabeçalhos (depende da hospedagem)
+### Fase 1 — Transporte e cabeçalhos (medido no endereço publicado em 25/10/2026)
+
+URL: `https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/app/` · comando: `bash testes/headers.sh <url>`
 
 | # | Resultado | Evidência / ação |
 |---|---|---|
-| 1.1 HTTPS forçado | ❓ | GitHub Pages e Cloudflare forçam HTTPS (ativar "Enforce HTTPS"). Verificar com `bash testes/headers.sh <url>` após publicar |
-| 1.2 HSTS | ❓ | github.io envia HSTS; Cloudflare/Netlify via `app/_headers` |
-| 1.3 CSP | ✅ | CSP restritiva no `index.html` (meta) e no `app/_headers`. Sem `unsafe-inline` nem `unsafe-eval` |
-| 1.4 Anti-clickjacking | ✅ mitigado | GitHub Pages **não permite** X-Frame-Options; o app se recusa a rodar dentro de iframe (teste e2e `1.4`). Em Cloudflare/Netlify, `_headers` aplica `frame-ancestors 'none'` + `DENY` |
-| 1.5 nosniff | ❓ | `_headers`; conferir após publicar |
-| 1.6 Referrer-Policy | ✅ | meta `strict-origin-when-cross-origin` + `_headers` |
-| 1.7 CORS | ℹ️ | Sem API. Arquivos estáticos públicos |
+| 1.1 HTTPS forçado | ❓ | O ambiente de teste não consegue sair por HTTP puro. Conferir em **Settings → Pages → Enforce HTTPS** marcado |
+| 1.2 HSTS | ✅ | Enviado pelo github.io |
+| 1.3 CSP | ✅ via meta / ⚠️ sem cabeçalho | GitHub Pages não permite cabeçalho próprio; a CSP restritiva vale pela `<meta>` do `index.html` |
+| 1.4 Anti-clickjacking | ✅ mitigado / ⚠️ sem cabeçalho | Sem X-Frame-Options no GitHub Pages; o app se recusa a rodar dentro de iframe (e2e `1.4`) |
+| 1.5 nosniff | ⚠️ baixo | Ausente no GitHub Pages. Risco baixo: só arquivos estáticos próprios, sem upload para o servidor |
+| 1.6 Referrer-Policy | ✅ via meta / ⚠️ sem cabeçalho | `<meta name="referrer">` aplicada |
+| 1.7 CORS | ℹ️ | `*` em arquivos estáticos públicos; não há API nem dado sensível no domínio |
 | 1.8 Cookies | ℹ️ | Não usa cookies |
+| 8.4 PWA no domínio final | ✅ | manifest, sw.js e ícones → 200; service worker ativo; console limpo |
+
+> Os 4 ⚠️ desta fase são limitação do GitHub Pages, aceitável para demonstração com dados sintéticos. Para fechar a fase 1 inteira: Cloudflare Pages/Netlify (aplicam `app/_headers` sem mudar código) ou a hospedagem corporativa.
 
 ### Fase 2 — Autenticação e sessão 🔒
 ℹ️ Não implementada (escolha de perfil). **Produção:** SSO corporativo (OIDC) com MFA; refazer 2.1–2.10, em especial **2.9** (hoje o perfil vem da lista local — aceitável só em demo).

@@ -8,6 +8,7 @@ import {
 import { AREA_CONCESSAO } from './seed.js';
 import { cartaoDefeito } from './ui.js';
 import { atribuirInspecao, distribuirAutomatico, ErroRegra } from './acoes.js';
+import { logar } from './auditoria.js';
 
 const pode = (...p) => p.includes(estado.usuario.perfil);
 const secao = (titulo, ...conteudo) => el('section', { class: 'bloco' }, el('h2', { text: titulo }), ...conteudo);
@@ -75,7 +76,7 @@ function exportarDefeitos(lista) {
     linhas.push([f.id, a?.codigo, a?.tipo, a?.alimentador, a?.conjunto, tipoDefeito(f.tipoId)?.nome, f.severidade, STATUS_DEFEITO[f.status], s, faixaRisco(s).nome, f.criadoEm.slice(0, 10), diasEntre(f.criadoEm, hojeISO()), f.equipeId ? nomeEquipe(f.equipeId) : '', f.execucao?.em?.slice(0, 10) || '']);
   }
   baixarArquivo(`defeitos-${hojeISO()}.csv`, csvStringify(linhas));
-  registrar('EXPORTACAO', 'defeito', null, { registros: lista.length });
+  registrar('DEFEITOS_EXPORTADOS', 'defeito', null, { registros: lista.length }, 'EXPORTACAO');
 }
 
 // ======================= PLANO =======================
@@ -177,7 +178,7 @@ export function telaPlano(raiz, { abrirNoMapa }) {
   const rel = ultimoRelatorio ? secao(`Relatório da importação v${ultimoRelatorio.versao}`,
     el('p', { text: `${ultimoRelatorio.aceitos} linha(s) aceita(s) · ${ultimoRelatorio.novos} ativo(s) novo(s) · ${ultimoRelatorio.geradas} inspeção(ões) gerada(s) · ${ultimoRelatorio.rejeitados.length} rejeitada(s)` }),
     ultimoRelatorio.rejeitados.length ? tabela(['Linha', 'Código', 'Motivo'], ultimoRelatorio.rejeitados.map((r) => [r.linha, r.codigo || '—', r.motivo])) : null,
-    ultimoRelatorio.rejeitados.length ? el('button', { type: 'button', class: 'btn btn--sec', text: 'Baixar rejeições', onclick: () => baixarArquivo('rejeicoes-importacao.csv', csvStringify([['linha', 'codigo', 'motivo'], ...ultimoRelatorio.rejeitados.map((r) => [r.linha, r.codigo, r.motivo])])) }) : null,
+    ultimoRelatorio.rejeitados.length ? el('button', { type: 'button', class: 'btn btn--sec', text: 'Baixar rejeições', onclick: () => logar({ categoria: 'EXPORTACAO', acao: 'REJEICOES_EXPORTADAS' }) && baixarArquivo('rejeicoes-importacao.csv', csvStringify([['linha', 'codigo', 'motivo'], ...ultimoRelatorio.rejeitados.map((r) => [r.linha, r.codigo, r.motivo])])) }) : null,
   ) : null;
 
   const linhasCrit = CRITERIOS.map((c) => {
@@ -286,7 +287,7 @@ export function telaPainel(raiz, { abrirNoMapa }) {
     el('header', { class: 'tela__topo' }, el('h1', { text: 'Painel do plano' }),
       el('div', { class: 'linha' },
         el('button', { type: 'button', class: 'btn btn--sec', text: 'Exportar defeitos (CSV)', onclick: () => exportarDefeitos(d.defeitos) }),
-        el('button', { type: 'button', class: 'btn btn--sec', text: 'Imprimir / PDF', onclick: () => window.print() }))),
+        el('button', { type: 'button', class: 'btn btn--sec', text: 'Imprimir / PDF', onclick: () => { logar({ categoria: 'EXPORTACAO', acao: 'PAINEL_IMPRESSO' }); window.print(); } }))),
     el('div', { class: 'kpi-grupos' },
       el('section', { class: 'kpi-grupo' }, el('h2', { text: 'Execução do plano' }), el('div', { class: 'kpis' },
         kpi('Aderência ao plano', fmtPct(ind.aderencia), `${ind.devidas} devidas até hoje · meta 90%`, ind.aderencia >= 0.9 ? '' : 'kpi--alerta'),

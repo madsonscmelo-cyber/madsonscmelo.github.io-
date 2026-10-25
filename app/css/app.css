@@ -415,3 +415,21 @@ select.campo__input { width: auto; max-width: 100%; }
   background-size: 48px 48px;
 }
 #mapa.mapa--leve .tronco { stroke-opacity: 1; stroke-width: 6; }
+
+/* ---------- Login, senha e auditoria ---------- */
+.login__form { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 1rem; }
+.login__msg { margin: 0; min-height: 1.2em; color: var(--risco-critico); font-weight: 700; }
+.login__msg:empty { min-height: 0; }
+.login__demo summary { min-height: var(--alvo); display: flex; align-items: center; cursor: pointer; font-weight: 700; color: var(--primaria); }
+.campo-senha { display: flex; gap: .3rem; align-items: center; }
+.campo-senha .campo__input { flex: 1; }
+.regras { list-style: none; margin: 0; padding: 0; display: grid; gap: .2rem; font-size: .86rem; color: var(--texto-2); }
+.regras li.ok { color: var(--risco-baixo); font-weight: 600; }
+.politica { margin: 0; padding-left: 1.1rem; display: grid; gap: .45rem; }
+.tabela--logs td { white-space: nowrap; }
+.tr--negado td { background: #fdecea; }
+.tr--invalido td { background: #fff8e1; }
+.tr--erro td { background: #fdecea; color: #5a0f0f; }
+.chip--res-ok { color: var(--risco-baixo); }
+.chip--res-negado, .chip--res-erro { background: var(--risco-critico); color: #fff; border-color: transparent; }
+.chip--res-invalido { background: #fff3cd; color: #4a3500; }

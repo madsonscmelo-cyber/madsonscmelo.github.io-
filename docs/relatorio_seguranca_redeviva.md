@@ -39,13 +39,37 @@ URL: `https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/app/` · coma
 
 > Os 4 ⚠️ desta fase são limitação do GitHub Pages, aceitável para demonstração com dados sintéticos. Para fechar a fase 1 inteira: Cloudflare Pages/Netlify (aplicam `app/_headers` sem mudar código) ou a hospedagem corporativa.
 
-### Fase 2 — Autenticação e sessão 🔒
-ℹ️ Não implementada (escolha de perfil). **Produção:** SSO corporativo (OIDC) com MFA; refazer 2.1–2.10, em especial **2.9** (hoje o perfil vem da lista local — aceitável só em demo).
+### Fase 2 — Autenticação e sessão (login local da demonstração)
+
+| # | Resultado | Evidência |
+|---|---|---|
+| 2.1 Login válido | ✅ | Matrícula + senha; primeiro acesso obriga a criar senha pessoal |
+| 2.2 Mensagem única | ✅ | Senha errada e matrícula inexistente → "Matrícula ou senha inválidas." (mesmo tempo de resposta) |
+| 2.3 / 2.4 Limite de tentativas | ✅ | 5 erros bloqueiam a matrícula por 15 min (nem a senha certa entra); 20 erros bloqueiam o aparelho |
+| 2.5 Hash de senha | ✅ | PBKDF2-SHA-256, 210.000 iterações, sal aleatório por usuário; texto da senha ausente dos dados |
+| 2.6 Logout | ✅ | Encerra a sessão; recarregar exige login |
+| 2.7 Expiração | ✅ | Bloqueio após 20 min sem uso (desbloqueio pede senha; trabalho preservado); fim do turno em 10 h |
+| 2.8 Troca de senha | ✅ | Política: ≥10 caracteres, 3 de 4 tipos, sem matrícula/nome, sem senha comum, sem repetir as 3 últimas. Redefinição pelo gestor força nova troca |
+| 2.9 Origem do perfil | ⚠️ demo | Perfil lido da base local. Produção: do servidor/AD via SSO |
+| 2.10 Revogação | ✅ | Gestor bloqueia → login recusado e sessão aberta derrubada ao voltar ao app |
+
+> 🔒 Continua bloqueando produção: login local não substitui o SSO corporativo com MFA, e quem controla o aparelho pode manipular a base local.
+
+### Logs de auditoria (pedido do gestor: "tudo fica logado")
+
+| # | Resultado | Evidência |
+|---|---|---|
+| LOG-1 Cobertura | ✅ | Login/logout (sucesso e falha), bloqueios, troca e recusa de senha, telas abertas, ativos consultados, buscas, filtros, rotas, alertas, inspeções, defeitos, execuções, fotos, importações, exportações, impressões, preferências, administração de usuários, ações negadas, validações recusadas e erros |
+| LOG-2 Sem dado sensível | ✅ | Varredura do log inteiro: nenhuma senha (certa ou errada); posição GPS fora do log |
+| LOG-3 Integridade | ✅ | Registro só de inclusão encadeado por SHA-256; alterar um registro é detectado ("conteúdo do registro 3 foi alterado") |
+| LOG-4 Acesso aos logs | ✅ | Só gestor e auditoria; consulta, verificação e exportação também são registradas |
+| LOG-5 Cópia oficial | 🔒 | Logs no aparelho podem ser apagados por quem controla o navegador. Produção: envio contínuo a servidor só de inclusão/SIEM |
 
 ### Fase 3 — Autorização
 | # | Resultado | Evidência |
 |---|---|---|
 | 3.4 Escopo do usuário comum | ✅ (cliente) | Equipe não vê Plano/Painel; filtro "minha equipe" |
+| 3.5 Escopo do auditor/gestor | ✅ (cliente) | Auditoria só consulta (sem mapa nem plano); só o gestor administra acessos; só gestor e auditoria veem logs |
 | 3.6 / 3.7 / 3.9 Ações proibidas por chamada direta | ✅ (cliente) | Chamando os módulos direto no navegador como equipe de poda: autovalidar, executar defeito de outra equipe, atribuir inspeção e concluir inspeção sem foto → **todos bloqueados** (teste e2e `3.6/3.7/3.9`) |
 | 3.1–3.3, 3.5, 3.8, 3.10–3.13 | 🔒 ℹ️ | Sem servidor. **Produção:** a mesma máquina de estados (`app/js/dominio.js` + `acoes.js`) precisa ser reimplementada no banco (RPC com SECURITY DEFINER e RLS por território) e testada com o token do perfil mais fraco |
 
@@ -103,7 +127,7 @@ URL: `https://madsonscmelo-cyber.github.io/madsonscmelo.github.io-/app/` · coma
 
 ```bash
 bash testes/seguranca-estatica.sh                 # fases 1.3/1.4, 6 e 8 (estático)
-cd testes && npm install && npx playwright install chromium && npm run e2e   # 22 verificações ponta a ponta
+cd testes && npm install && npx playwright install chromium && npm run e2e   # 33 verificações ponta a ponta
 bash testes/headers.sh https://SEU-DOMINIO/app/   # fase 1, após publicar
 ```
 

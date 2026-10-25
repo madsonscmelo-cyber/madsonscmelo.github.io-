@@ -2,13 +2,28 @@
 import { uid, hojeISO, distanciaM } from './util.js';
 import { estado, registrar, ativoPorId, equipeDoUsuario } from './store.js';
 import { podeTransicionar, gerarInspecoesDevidas, tipoDefeito, equipesAptas } from './dominio.js';
+import { logar } from './auditoria.js';
 
 const agora = () => new Date().toISOString();
 
-export class ErroRegra extends Error {}
+/** Toda recusa também vai para o log: permissão negada (segurança) ou dado inválido (validação). */
+export class ErroRegra extends Error {
+  constructor(mensagem, tipo = 'VALIDACAO') {
+    super(mensagem);
+    this.tipo = tipo;
+    const permissao = tipo === 'PERMISSAO';
+    logar({ categoria: permissao ? 'SEGURANCA' : 'VALIDACAO', acao: permissao ? 'ACAO_NEGADA' : 'VALIDACAO_RECUSADA', resultado: permissao ? 'NEGADO' : 'INVALIDO', detalhe: { motivo: mensagem } });
+  }
+}
+
+const PERFIS_OPERACAO = ['GESTOR', 'SUPERVISOR', 'EQUIPE'];
+function exigirPerfil(perfis, acao) {
+  if (!estado.usuario || !perfis.includes(estado.usuario.perfil)) throw new ErroRegra(`Seu perfil não pode ${acao}.`, 'PERMISSAO');
+}
 
 /** Conclui inspeções (programadas ou avulsa) com os defeitos encontrados. */
 export function concluirInspecao({ ativoIds, inspecaoIds = [], avulsa, checklist, fotos, geo, justificativa, observacao, defeitos = [] }) {
+  exigirPerfil(PERFIS_OPERACAO, 'registrar inspeção');
   const d = estado.dados, u = estado.usuario, eq = equipeDoUsuario(), em = agora();
   if (!fotos?.length) throw new ErroRegra('Foto obrigatória na inspeção.');
   if (!geo.dentroDoRaio && !justificativa?.trim()) throw new ErroRegra('Posição fora do raio de validação: informe a justificativa.');
@@ -62,7 +77,7 @@ export function concluirInspecao({ ativoIds, inspecaoIds = [], avulsa, checklist
 
 export function transicionar(defeito, para, extra = {}) {
   const u = estado.usuario, em = agora();
-  if (!podeTransicionar(u, defeito, para)) throw new ErroRegra('Seu perfil não pode executar esta ação.');
+  if (!podeTransicionar(u, defeito, para)) throw new ErroRegra('Seu perfil não pode executar esta ação.', 'PERMISSAO');
   if (para === 'PROGRAMADO') {
     if (!equipesAptas(estado.dados, defeito).some((e) => e.id === extra.equipeId)) throw new ErroRegra('Equipe não é apta para este tipo de defeito.');
     defeito.equipeId = extra.equipeId;
@@ -82,7 +97,7 @@ export function transicionar(defeito, para, extra = {}) {
 }
 
 export function atribuirInspecao(inspecaoId, equipeId) {
-  if (!['GESTOR', 'SUPERVISOR'].includes(estado.usuario.perfil)) throw new ErroRegra('Sem permissão.');
+  if (!['GESTOR', 'SUPERVISOR'].includes(estado.usuario.perfil)) throw new ErroRegra('Sem permissão.', 'PERMISSAO');
   const i = estado.dados.inspecoes.find((x) => x.id === inspecaoId);
   i.equipeId = equipeId || null;
   i.status = equipeId ? 'ATRIBUIDA' : 'PENDENTE';
@@ -91,7 +106,7 @@ export function atribuirInspecao(inspecaoId, equipeId) {
 
 /** Distribui inspeções sem equipe entre as equipes de inspeção disponíveis, mantendo cada alimentador numa equipe. */
 export function distribuirAutomatico() {
-  if (!['GESTOR', 'SUPERVISOR'].includes(estado.usuario.perfil)) throw new ErroRegra('Sem permissão.');
+  if (!['GESTOR', 'SUPERVISOR'].includes(estado.usuario.perfil)) throw new ErroRegra('Sem permissão.', 'PERMISSAO');
   const d = estado.dados;
   const eqs = d.equipes.filter((e) => e.tipo === 'INSPECAO' && e.disponivel);
   if (!eqs.length) throw new ErroRegra('Nenhuma equipe de inspeção disponível.');
@@ -109,6 +124,7 @@ export function distribuirAutomatico() {
 }
 
 export function criarAtivoAvulso({ lat, lon }) {
+  exigirPerfil(PERFIS_OPERACAO, 'criar ponto avulso');
   const d = estado.dados;
   const proximo = d.ativos.reduce((m, a) => {
     const dist = distanciaM(lat, lon, a.lat, a.lon);

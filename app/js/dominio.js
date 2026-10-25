@@ -64,6 +64,7 @@ export const PERFIS = {
   GESTOR: 'Gestor / Planejamento',
   SUPERVISOR: 'Supervisor de campo',
   EQUIPE: 'Equipe de campo',
+  AUDITOR: 'Auditoria (somente leitura)',
 };
 
 export const RAIO_VALIDACAO_M = 50;

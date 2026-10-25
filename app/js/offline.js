@@ -5,6 +5,7 @@ import { estado, registrar, persistir, equipeDoUsuario, sincronizar, online, res
 import { STATUS_ABERTOS, pendenciasDaEquipe } from './dominio.js';
 import { abrirSheet } from './ui.js';
 import * as mapa from './mapa.js';
+import { logar } from './auditoria.js';
 
 export const CACHE_PACOTES = 'redeviva-pacotes';
 const ZOOMS = [14, 15, 16, 17];
@@ -125,6 +126,7 @@ export async function removerPacote(alim) {
 export const config = () => (estado.dados.config ||= { mapaLeve: false, fotosSoWifi: true });
 export function definirMapaLeve(v) {
   config().mapaLeve = v;
+  logar({ categoria: 'NAVEGACAO', acao: 'PREFERENCIA_ALTERADA', detalhe: { mapaLeve: v } });
   mapa.definirFundo(v);
   persistir();
 }
@@ -187,7 +189,7 @@ export async function abrirTrabalhoOffline() {
   const leve = el('input', { type: 'checkbox', checked: config().mapaLeve });
   leve.addEventListener('change', () => definirMapaLeve(leve.checked));
   const wifi = el('input', { type: 'checkbox', checked: config().fotosSoWifi });
-  wifi.addEventListener('change', () => { config().fotosSoWifi = wifi.checked; persistir(); sincronizar(); });
+  wifi.addEventListener('change', () => { config().fotosSoWifi = wifi.checked; persistir(); sincronizar(); logar({ categoria: 'NAVEGACAO', acao: 'PREFERENCIA_ALTERADA', detalhe: { fotosSoWifi: wifi.checked } }); });
   const f = resumoFila();
 
   const corpo = el('div', { class: 'form' },

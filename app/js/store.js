@@ -2,16 +2,20 @@
 // No produto real a fila é enviada à API; aqui ela só demonstra o comportamento offline-first.
 import { uid } from './util.js';
 import { gerarSeed, VERSAO_SCHEMA } from './seed.js';
+import { logar } from './auditoria.js';
 
 const NOME_DB = 'redeviva';
 let dbPromessa;
 
 function abrirDb() {
   dbPromessa ||= new Promise((res, rej) => {
-    const r = indexedDB.open(NOME_DB, 1);
+    const r = indexedDB.open(NOME_DB, 2);
     r.onupgradeneeded = () => {
-      r.result.createObjectStore('kv');
-      r.result.createObjectStore('fotos');
+      const db = r.result;
+      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      if (!db.objectStoreNames.contains('fotos')) db.createObjectStore('fotos');
+      // Log de auditoria: só inclusão (append-only), chave = sequência.
+      if (!db.objectStoreNames.contains('logs')) db.createObjectStore('logs', { keyPath: 'seq' });
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -19,7 +23,7 @@ function abrirDb() {
   return dbPromessa;
 }
 
-async function idb(loja, modo, fn) {
+export async function idb(loja, modo, fn) {
   const db = await abrirDb();
   return new Promise((res, rej) => {
     const tx = db.transaction(loja, modo);
@@ -62,6 +66,7 @@ export async function salvarFoto(blob) {
   await idb('fotos', 'readwrite', (s) => s.put(blob, id));
   // Foto entra na fila separada dos registros: o texto sobe primeiro, a foto pode esperar o Wi-Fi.
   estado.dados.fila.push({ id: uid('op'), tipo: 'foto', entidadeId: id, bytes: blob.size, em: new Date().toISOString() });
+  logar({ categoria: 'ESCRITA', acao: 'FOTO_CAPTURADA', entidade: 'foto', entidadeId: id, detalhe: { bytes: blob.size } });
   persistir();
   emitir('sync');
   return id;
@@ -71,6 +76,7 @@ export const obterFoto = (id) => idb('fotos', 'readonly', (s) => s.get(id));
 export async function resetarDados() {
   await idb('kv', 'readwrite', (s) => s.clear());
   await idb('fotos', 'readwrite', (s) => s.clear());
+  // O log de auditoria NÃO é apagado no reset: a própria restauração fica registrada.
   estado.dados = gerarSeed();
   await persistir();
   emitir('mudou');
@@ -93,11 +99,12 @@ export const obterRascunho = (chave) => estado.dados.rascunhos?.[chave] || null;
 export const rascunhosDoUsuario = () => Object.values(estado.dados.rascunhos || {}).filter((r) => r.usuarioId === estado.usuario?.id);
 
 /** Toda mutação passa por aqui: grava auditoria, enfileira para sync e notifica as telas. */
-export function registrar(acao, entidade, entidadeId, detalhe = {}) {
+export function registrar(acao, entidade, entidadeId, detalhe = {}, categoria = 'ESCRITA') {
   const em = new Date().toISOString();
   const d = estado.dados;
   d.auditoria.unshift({ id: uid('aud'), em, usuario: estado.usuario?.id, perfil: estado.usuario?.perfil, acao, entidade, entidadeId, detalhe });
-  d.auditoria.length = Math.min(d.auditoria.length, 1000);
+  d.auditoria.length = Math.min(d.auditoria.length, 300); // cache recente para as telas; o log completo fica no store 'logs'
+  logar({ categoria, acao, entidade, entidadeId, detalhe });
   d.fila.push({ id: uid('op'), tipo: 'dados', acao, entidade, entidadeId, em, bytes: JSON.stringify(detalhe).length + 120 });
   // Grava imediatamente: dado de campo não pode depender de a aba continuar aberta.
   persistir();
@@ -107,9 +114,9 @@ export function registrar(acao, entidade, entidadeId, detalhe = {}) {
 
 export function resumoFila() {
   const f = estado.dados.fila;
-  const dados = f.filter((o) => o.tipo !== 'foto'), fotos = f.filter((o) => o.tipo === 'foto');
+  const dados = f.filter((o) => o.tipo === 'dados'), fotos = f.filter((o) => o.tipo === 'foto');
   const soma = (l) => l.reduce((t, o) => t + (o.bytes || 0), 0);
-  return { total: f.length, dados: dados.length, fotos: fotos.length, bytesDados: soma(dados), bytesFotos: soma(fotos) };
+  return { total: dados.length + fotos.length, dados: dados.length, fotos: fotos.length, bytesDados: soma(dados), bytesFotos: soma(fotos) };
 }
 
 /** Wi-Fi ou rede desconhecida = libera fotos; rede móvel informada pelo navegador = segura as fotos. */

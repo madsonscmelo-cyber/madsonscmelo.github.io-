@@ -8,58 +8,63 @@ import * as mapa from './mapa.js';
 import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho } from './ui.js';
 import { telaDefeitos, telaPlano, telaPainel, telaProducao } from './telas.js';
 import { criarAtivoAvulso } from './acoes.js';
+import { logar } from './auditoria.js';
+import { POLITICA, iniciarSessao, retomarSessao, encerrarSessao, registrarAtividade, situacaoSessao, revalidarUsuario } from './auth.js';
+import { telaLogin, telaTrocaSenha, telaBloqueio, telaAcesso } from './acesso.js';
 
 const TODOS = ['GESTOR', 'SUPERVISOR', 'EQUIPE'];
 const VIEWS = {
   mapa: { rotulo: 'Mapa', icone: '🗺️', perfis: TODOS },
-  defeitos: { rotulo: 'Defeitos', icone: '⚠️', perfis: TODOS, render: telaDefeitos },
+  defeitos: { rotulo: 'Defeitos', icone: '⚠️', perfis: [...TODOS, 'AUDITOR'], render: telaDefeitos },
   plano: { rotulo: 'Plano', icone: '📋', perfis: ['GESTOR', 'SUPERVISOR'], render: telaPlano },
-  painel: { rotulo: 'Painel', icone: '📊', perfis: ['GESTOR', 'SUPERVISOR'], render: telaPainel },
+  painel: { rotulo: 'Painel', icone: '📊', perfis: ['GESTOR', 'SUPERVISOR', 'AUDITOR'], render: telaPainel },
   producao: { rotulo: 'Produção', icone: '🏆', perfis: TODOS, render: telaProducao },
+  acesso: { rotulo: 'Acesso', icone: '🔐', perfis: ['GESTOR', 'AUDITOR'], render: telaAcesso },
 };
 
 let viewAtual = 'mapa', selecionado = null, gpsId = null, areaAtiva = null, houveOffline = false;
 const alertados = new Set();
 
-// ---------------- Sessão (demo) ----------------
-function telaLogin() {
-  const box = $('#login');
-  const grupos = Object.entries(PERFIS).map(([perfil, nome]) => el('div', { class: 'login__grupo' },
-    el('h2', { text: nome }),
-    el('div', { class: 'login__lista' }, estado.dados.usuarios.filter((u) => u.perfil === perfil).map((u) => {
-      const eq = estado.dados.equipes.find((e) => e.id === u.equipeId);
-      return el('button', { type: 'button', class: 'login__btn', onclick: () => entrar(u) },
-        el('strong', { text: u.nome }), eq ? el('span', { class: 'muted', text: `${TIPOS_EQUIPE[eq.tipo]} · ${eq.base}${eq.disponivel ? '' : ' · indisponível'}` }) : null);
-    }))));
-  box.replaceChildren(el('div', { class: 'login__cartao' },
-    el('div', { class: 'login__marca' }, el('img', { src: 'icon.svg', alt: '', width: 48, height: 48 }), el('div', {}, el('h1', { text: 'RedeViva' }), el('p', { class: 'muted', text: 'Plano de manutenção e inspeção de rede' }))),
-    el('p', { class: 'aviso-demo', text: 'Protótipo com dados sintéticos. Em produção o acesso é por SSO corporativo com MFA — aqui você apenas escolhe um perfil para demonstrar as permissões.' }),
-    ...grupos));
-  box.hidden = false;
+// ---------------- Sessão ----------------
+/** Login concluído (senha validada e, se exigido, trocada). */
+function entrar(u) {
+  iniciarSessao(u);
+  aposEntrar();
+  toast(`Conectado como ${u.nome} (${PERFIS[u.perfil]}).`);
 }
 
-function entrar(u) {
-  estado.usuario = u;
-  try { sessionStorage.setItem('redeviva-usuario', u.id); } catch { /* sem storage */ }
+function aposEntrar() {
+  const u = estado.usuario;
   $('#login').hidden = true;
-  registrar('LOGIN', 'sessao', u.id, { perfil: u.perfil });
   mapa.filtros.minhaEquipe = u.perfil === 'EQUIPE';
   montarNav();
   montarFiltros();
   atualizarTopo();
-  mostrar('mapa');
+  mostrar(VIEWS.mapa.perfis.includes(u.perfil) ? 'mapa' : 'acesso');
   setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 50);
-  toast(`Conectado como ${u.nome} (${PERFIS[u.perfil]}).`);
 }
 
-function sair() {
-  registrar('LOGOUT', 'sessao', estado.usuario.id);
+function sair(acao = 'LOGOUT', detalhe = {}) {
   pararGps();
-  estado.usuario = null;
+  encerrarSessao(acao, detalhe);
   estado.posicao = null;
-  try { sessionStorage.removeItem('redeviva-usuario'); } catch { /* sem storage */ }
   fecharSheet();
-  telaLogin();
+  $('#menu-usuario').hidden = true;
+  telaLogin(entrar);
+}
+
+/** Checklist 2.7 e 2.10: inatividade bloqueia a tela, fim do turno encerra, bloqueio feito pelo gestor derruba a sessão. */
+let telaBloqueada = false;
+function vigiarSessao() {
+  if (!estado.usuario || telaBloqueada) return;
+  if (!revalidarUsuario()) { sair('SESSAO_REVOGADA', { motivo: 'usuário bloqueado pelo gestor' }); toast('Seu acesso foi bloqueado pelo gestor.', { tipo: 'erro' }); return; }
+  const s = situacaoSessao();
+  if (s === 'turno-excedido') { sair('SESSAO_ENCERRADA_TURNO', { horas: POLITICA.sessaoMaximaHoras }); toast('Sessão encerrada: limite do turno.', { tipo: 'aviso' }); }
+  else if (s === 'inativa') {
+    telaBloqueada = true;
+    logar({ categoria: 'AUTENTICACAO', acao: 'SESSAO_BLOQUEADA_INATIVIDADE', entidade: 'sessao', entidadeId: estado.sessaoId, detalhe: { minutos: POLITICA.inatividadeMinutos } });
+    telaBloqueio(() => { telaBloqueada = false; }, () => { telaBloqueada = false; sair(); });
+  }
 }
 
 // ---------------- Navegação ----------------
@@ -70,13 +75,21 @@ function montarNav() {
 }
 
 function mostrar(id) {
-  if (!VIEWS[id]?.perfis.includes(estado.usuario.perfil)) return;
+  if (!VIEWS[id]?.perfis.includes(estado.usuario.perfil)) {
+    logar({ categoria: 'SEGURANCA', acao: 'ACESSO_NEGADO_TELA', resultado: 'NEGADO', detalhe: { tela: id } });
+    return false;
+  }
+  if (id !== viewAtual || !$(`#view-${id}`).dataset.aberta) logar({ categoria: 'NAVEGACAO', acao: 'TELA_ABERTA', detalhe: { tela: id } });
+  $$('.view').forEach((v) => { delete v.dataset.aberta; });
+  $(`#view-${id}`).dataset.aberta = '1';
   viewAtual = id;
   $$('.view').forEach((v) => { v.hidden = v.id !== `view-${id}`; });
   $$('.nav__btn').forEach((b) => b.classList.toggle('ativo', b.dataset.view === id));
   if (id !== 'mapa') fecharSheet();
   renderizarAtual();
   if (id === 'mapa') setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 30);
+  if (id === 'acesso') telaAcesso($('#view-acesso'));
+  return true;
 }
 
 function renderizarAtual() {
@@ -84,7 +97,8 @@ function renderizarAtual() {
   mapa.renderizar(selecionado);
   renderizarTopoMapa();
   const v = VIEWS[viewAtual];
-  if (v.render) v.render($(`#view-${viewAtual}`), { abrirNoMapa });
+  // A tela de logs é lida sob demanda (não a cada alteração de dados), para não recarregar a tabela enquanto se lê.
+  if (v.render && viewAtual !== 'acesso') v.render($(`#view-${viewAtual}`), { abrirNoMapa });
   const s = sheetAtual();
   if (s?.tipo === 'ativo') abrirAtivo(s.id);
   else if (s?.tipo === 'area' && areaAtiva) abrirArea(mapa.ativosNaArea(areaAtiva), limparArea);
@@ -92,8 +106,8 @@ function renderizarAtual() {
 
 function abrirNoMapa(ativoId) {
   const a = ativoPorId(ativoId);
-  if (!a) return;
-  mostrar('mapa');
+  if (!a || !VIEWS.mapa.perfis.includes(estado.usuario.perfil) || !mostrar('mapa')) return;
+  logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: a.id });
   selecionado = a.id;
   mapa.renderizar(selecionado);
   mapa.focar(a.lat, a.lon);
@@ -125,18 +139,25 @@ function menuUsuario() {
     el('div', { class: 'menu__info' }, el('strong', { text: estado.usuario.nome }), el('span', { class: 'muted', text: PERFIS[estado.usuario.perfil] })),
     el('button', { type: 'button', class: 'menu__item', text: estado.offlineSimulado ? 'Voltar a ficar online' : 'Simular modo offline', onclick: () => {
       estado.offlineSimulado = !estado.offlineSimulado; m.hidden = true; atualizarTopo(); sincronizar();
+      logar({ categoria: 'SISTEMA', acao: estado.offlineSimulado ? 'MODO_OFFLINE_SIMULADO' : 'MODO_ONLINE' });
       if (estado.offlineSimulado) aoFicarOffline();
       toast(estado.offlineSimulado ? 'Modo offline: registros ficam na fila local.' : 'Online: enviando fila.');
     } }),
     el('button', { type: 'button', class: 'menu__item', text: estado.redeMovelSimulada ? 'Voltar ao Wi-Fi' : 'Simular rede móvel (4G)', onclick: () => {
       estado.redeMovelSimulada = !estado.redeMovelSimulada; m.hidden = true; sincronizar();
+      logar({ categoria: 'SISTEMA', acao: estado.redeMovelSimulada ? 'REDE_MOVEL_SIMULADA' : 'REDE_WIFI' });
       toast(estado.redeMovelSimulada ? 'Rede móvel: registros sobem, fotos aguardam o Wi-Fi.' : 'Wi-Fi: enviando fotos pendentes.');
     } }),
-    el('button', { type: 'button', class: 'menu__item', text: 'Trocar usuário / perfil', onclick: () => { m.hidden = true; sair(); } }),
+    el('button', { type: 'button', class: 'menu__item', text: 'Alterar minha senha', onclick: () => { m.hidden = true; telaTrocaSenha(estado.usuario, () => {}, false, () => {}); } }),
+    el('button', { type: 'button', class: 'menu__item', text: 'Sair', onclick: () => { m.hidden = true; sair(); } }),
     estado.usuario.perfil === 'GESTOR' ? el('button', { type: 'button', class: 'menu__item menu__item--perigo', text: 'Restaurar dados de demonstração', onclick: async () => {
       m.hidden = true;
       if (!confirm('Apagar todos os registros locais e restaurar os dados sintéticos?')) return;
-      limparArea(); fecharSheet(); await resetarDados(); toast('Dados de demonstração restaurados.', { tipo: 'ok' });
+      logar({ categoria: 'ADMIN', acao: 'DADOS_DEMO_RESTAURADOS' });
+      const usuarioAtual = estado.usuario;
+      limparArea(); fecharSheet(); await resetarDados();
+      toast('Dados de demonstração restaurados. Entre novamente.', { tipo: 'ok' });
+      if (usuarioAtual) sair('LOGOUT', { motivo: 'restauração dos dados de demonstração' });
     } }) : null);
   m.hidden = false;
 }
@@ -152,12 +173,14 @@ function iniciarGps() {
   if (!('geolocation' in navigator)) { toast('GPS indisponível neste dispositivo.', { tipo: 'erro' }); return; }
   if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
   if (gpsId !== null) { if (estado.posicao) mapa.focar(estado.posicao.lat, estado.posicao.lon, 16); return; }
+  logar({ categoria: 'NAVEGACAO', acao: 'GPS_ATIVADO' });
   let primeira = true;
   gpsId = navigator.geolocation.watchPosition((pos) => {
     aplicarPosicao({ lat: pos.coords.latitude, lon: pos.coords.longitude, precisao: pos.coords.accuracy, simulada: false });
     if (primeira) { primeira = false; mapa.focar(pos.coords.latitude, pos.coords.longitude, 16); }
   }, (err) => {
     toast(`GPS: ${err.code === 1 ? 'permissão negada' : 'sem sinal'}. Use "Simular posição" para a demonstração.`, { tipo: 'aviso' });
+    logar({ categoria: 'SISTEMA', acao: 'GPS_FALHOU', resultado: 'ERRO', detalhe: { motivo: err.code === 1 ? 'permissão negada' : 'sem sinal' } });
     pararGps();
   }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
   toast('Buscando sua posição…');
@@ -189,6 +212,7 @@ function checarProximidade() {
   const desc = r.itens.map((i) => (i.tipo === 'inspecao' ? 'inspeção' : 'defeito')).join(' + ');
   const msg = `Perto de você (${Math.round(r.dist)} m): ${TIPOS_ATIVO[r.a.tipo]} ${r.a.codigo} — ${desc}${lista.length > 1 ? ` · +${lista.length - 1} ponto(s)` : ''}`;
   toast(msg, { tipo: 'alerta', duracao: 9000, acao: { texto: 'Abrir', fn: () => abrirNoMapa(r.a.id) } });
+  logar({ categoria: 'LEITURA', acao: 'ALERTA_PROXIMIDADE', entidade: 'ativo', entidadeId: r.a.id, detalhe: { distanciaM: Math.round(r.dist), pontos: lista.length } });
   navigator.vibrate?.(200);
   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification('RedeViva — pendência próxima', { body: msg, icon: 'icon.svg', tag: r.a.id }); } catch { /* alguns navegadores exigem SW */ }
@@ -252,7 +276,7 @@ function montarBusca() {
     const q = inp.value.trim().toUpperCase();
     if (q.length < 2) { lista.replaceChildren(); return; }
     const achados = estado.dados.ativos.filter((a) => a.codigo.includes(q)).slice(0, 6);
-    lista.replaceChildren(...(achados.length ? achados.map((a) => el('button', { type: 'button', class: 'busca__item', role: 'option', onclick: () => { fechar(); inp.blur(); abrirNoMapa(a.id); } },
+    lista.replaceChildren(...(achados.length ? achados.map((a) => el('button', { type: 'button', class: 'busca__item', role: 'option', onclick: () => { logar({ categoria: 'LEITURA', acao: 'BUSCA_ATIVO', detalhe: { termo: inp.value.trim() } }); fechar(); inp.blur(); abrirNoMapa(a.id); } },
       el('strong', { text: a.codigo }), el('span', { class: 'muted', text: `${TIPOS_ATIVO[a.tipo]} · ${a.alimentador}` }))) : [el('div', { class: 'busca__vazio muted', text: 'Nenhum ativo com esse código.' })]));
   });
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') lista.querySelector('.busca__item')?.click(); });
@@ -263,12 +287,12 @@ function montarFiltros() {
   const f = mapa.filtros, d = estado.dados;
   const cb = (rotulo, get, set) => {
     const i = el('input', { type: 'checkbox', checked: get() });
-    i.addEventListener('change', () => { set(i.checked); mapa.renderizar(selecionado); });
+    i.addEventListener('change', () => { set(i.checked); mapa.renderizar(selecionado); logar({ categoria: 'NAVEGACAO', acao: 'FILTRO_MAPA', detalhe: { filtro: rotulo, valor: i.checked } }); });
     return el('label', { class: 'campo--check' }, i, el('span', { text: rotulo }));
   };
   const sel = (rotulo, opcoes, chave) => {
     const s = el('select', { class: 'campo__input' }, opcoes.map(([v, t]) => el('option', { value: v, text: t, selected: f[chave] === v })));
-    s.addEventListener('change', () => { f[chave] = s.value; mapa.renderizar(selecionado); });
+    s.addEventListener('change', () => { f[chave] = s.value; mapa.renderizar(selecionado); logar({ categoria: 'NAVEGACAO', acao: 'FILTRO_MAPA', detalhe: { filtro: chave, valor: s.value } }); });
     return el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: rotulo }), s);
   };
   $('#painel-filtros').replaceChildren(
@@ -283,6 +307,7 @@ function montarFiltros() {
 }
 
 function aoModo(modo) {
+  if (modo) logar({ categoria: 'NAVEGACAO', acao: 'MODO_MAPA', detalhe: { modo } });
   ['simular', 'area', 'avulso'].forEach((m) => $(`#ctrl-${m}`)?.classList.toggle('ctrl--ativo', modo === m));
   $('#ctrl-mais')?.classList.toggle('ctrl--ativo', modo === 'simular' || modo === 'avulso');
 }
@@ -315,10 +340,11 @@ async function iniciar() {
   await carregar();
   registrarSw();
   mapa.iniciarMapa($('#mapa'), {
-    onAtivo: (id) => { selecionado = id; mapa.renderizar(id); abrirAtivo(id); },
-    onArea: (b) => { areaAtiva = b; abrirArea(mapa.ativosNaArea(b), limparArea); },
+    onAtivo: (id) => { logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: id }); selecionado = id; mapa.renderizar(id); abrirAtivo(id); },
+    onArea: (b) => { areaAtiva = b; const ativos = mapa.ativosNaArea(b); logar({ categoria: 'LEITURA', acao: 'AREA_SELECIONADA', detalhe: { ativos: ativos.length } }); abrirArea(ativos, limparArea); },
     onPontoAvulso: (p) => {
-      const a = criarAtivoAvulso(p);
+      let a;
+      try { a = criarAtivoAvulso(p); } catch (e) { toast(e.message, { tipo: 'erro' }); return; }
       selecionado = a.id;
       abrirFormInspecao({ ativos: [a], inspecoes: [], avulsa: true });
     },
@@ -344,10 +370,15 @@ async function iniciar() {
   window.addEventListener('offline', () => { aoFicarOffline(); atualizarTopo(); });
   setInterval(sincronizar, 15000);
 
-  let salvo = null;
-  try { salvo = sessionStorage.getItem('redeviva-usuario'); } catch { /* sem storage */ }
-  const u = estado.dados.usuarios.find((x) => x.id === salvo);
-  if (u) entrar(u); else telaLogin();
+  // Sessão: atividade, inatividade, fim de turno e revalidação ao voltar ao app.
+  ['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, registrarAtividade, { passive: true }));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') vigiarSessao(); });
+  setInterval(vigiarSessao, 30000);
+  window.addEventListener('error', (e) => logar({ categoria: 'SISTEMA', acao: 'ERRO_APLICACAO', resultado: 'ERRO', detalhe: { mensagem: e.message } }));
+  window.addEventListener('unhandledrejection', (e) => logar({ categoria: 'SISTEMA', acao: 'ERRO_APLICACAO', resultado: 'ERRO', detalhe: { mensagem: String(e.reason?.message || e.reason) } }));
+  logar({ categoria: 'SISTEMA', acao: 'APP_INICIADO', detalhe: { instalado: matchMedia('(display-mode: standalone)').matches } });
+
+  if (retomarSessao()) aposEntrar(); else telaLogin(entrar);
 }
 
 iniciar().catch((e) => {

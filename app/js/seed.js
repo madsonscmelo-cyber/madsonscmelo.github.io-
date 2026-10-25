@@ -2,7 +2,7 @@
 import { mulberry32, deslocar, distanciaM, hojeISO, somarDias, uid } from './util.js';
 import { CRITERIOS, tiposDefeitoPara, gerarInspecoesDevidas } from './dominio.js';
 
-export const VERSAO_SCHEMA = 3;
+export const VERSAO_SCHEMA = 4;
 
 const SE = [-15.8405, -48.0760]; // subestação fictícia
 const ROTAS = {
@@ -39,11 +39,13 @@ export function gerarSeed() {
     { id: 'LV-01', nome: 'Linha Viva 01', tipo: 'LINHA_VIVA', base: 'Base Oeste', disponivel: true },
     { id: 'POD-01', nome: 'Poda 01', tipo: 'PODA', base: 'Base Sul', disponivel: true },
   ];
+  // Senha inicial de demonstração (POLITICA.senhaInicialDemo) com troca obrigatória no primeiro acesso.
   const usuarios = [
-    { id: 'u-gestor', nome: 'Gestão de Planejamento', perfil: 'GESTOR' },
-    { id: 'u-sup', nome: 'Supervisão de Campo', perfil: 'SUPERVISOR' },
-    ...equipes.map((e) => ({ id: `u-${e.id}`, nome: `Equipe ${e.nome}`, perfil: 'EQUIPE', equipeId: e.id })),
-  ];
+    { id: 'u-gestor', matricula: 'G1001', nome: 'Gestão de Planejamento', perfil: 'GESTOR' },
+    { id: 'u-sup', matricula: 'S1001', nome: 'Supervisão de Campo', perfil: 'SUPERVISOR' },
+    { id: 'u-auditor', matricula: 'A1001', nome: 'Auditoria Interna', perfil: 'AUDITOR' },
+    ...equipes.map((e) => ({ id: `u-${e.id}`, matricula: e.id.replace('-', ''), nome: `Equipe ${e.nome}`, perfil: 'EQUIPE', equipeId: e.id })),
+  ].map((u) => ({ ...u, ativo: true, credencial: null, trocarSenha: true }));
 
   const ativos = [];
   const trechos = [];

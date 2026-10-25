@@ -27,10 +27,26 @@ function registrar(id, nome, passou, evidencia) {
     p.on('pageerror', (e) => erros.push(e.message));
   };
   const dados = (p) => p.evaluate(() => new Promise((res) => { const q = indexedDB.open('redeviva'); q.onsuccess = () => { const g = q.result.transaction('kv').objectStore('kv').get('dados'); g.onsuccess = () => res(g.result); }; }));
+  const MATRICULAS = { 'Gestão de Planejamento': 'G1001', 'Supervisão de Campo': 'S1001', 'Auditoria Interna': 'A1001', 'Equipe Inspeção 01': 'INS01', 'Equipe Inspeção 02': 'INS02', 'Equipe Turma Pesada 01': 'PES01', 'Equipe Poda 01': 'POD01' };
+  const SENHA_INICIAL = 'Rede@2026', SENHA_NOVA = 'Torre#Verde2026';
+  const sairDoApp = async (p) => { await p.click('#btn-usuario'); await p.click('.menu__item:has-text("Sair")'); await p.waitForSelector('#login input[autocomplete=username]'); };
+  /** Login real: matrícula + senha; no primeiro acesso cria a senha pessoal (política exige troca). */
   const entrar = async (p, nome) => {
-    if (await p.locator('#login').isHidden()) { await p.click('#btn-usuario'); await p.click('text=Trocar usuário'); }
-    await p.click(`.login__btn:has-text("${nome}")`);
-    await p.waitForTimeout(350);
+    const mat = MATRICULAS[nome] || nome;
+    if (await p.locator('#login').isHidden()) await sairDoApp(p);
+    p.__trocadas ||= new Set();
+    await p.fill('#login input[autocomplete=username]', mat);
+    await p.fill('#login input[autocomplete=current-password]', p.__trocadas.has(mat) ? SENHA_NOVA : SENHA_INICIAL);
+    await p.click('#login button[type=submit]');
+    await p.waitForFunction(() => document.querySelector('#login').hidden || document.querySelector('#login input[autocomplete=new-password]') || document.querySelector('.login__msg')?.textContent, null, { timeout: 15000 });
+    if (await p.locator('#login input[autocomplete=new-password]').count()) {
+      const [n1, n2] = await p.locator('#login input[autocomplete=new-password]').all();
+      await n1.fill(SENHA_NOVA); await n2.fill(SENHA_NOVA);
+      await p.click('#login button[type=submit]');
+      await p.waitForFunction(() => document.querySelector('#login').hidden, null, { timeout: 15000 });
+      p.__trocadas.add(mat);
+    }
+    await p.waitForTimeout(300);
   };
   const ultimoToast = async (p) => (await p.locator('.toast').allInnerTexts()).at(-1) || '';
 
@@ -156,6 +172,99 @@ function registrar(id, nome, passou, evidencia) {
     registrar('8.3', 'Offline: fila local e sincronização ao reconectar', /a enviar/.test(fila) && /Sincronizado/.test(apos), `${fila} → ${apos}`);
     await ctx.close();
 
+    // ================= Fase 2 — autenticação, sessão e logs =================
+    const ca = await browser.newContext({ viewport: { width: 1280, height: 820 }, serviceWorkers: 'block' });
+    const pa = await ca.newPage();
+    vigiar(pa);
+    await pa.goto(BASE);
+    const tentar = async (mat, senha) => {
+      await pa.fill('#login input[autocomplete=username]', mat);
+      await pa.fill('#login input[autocomplete=current-password]', senha);
+      await pa.click('#login button[type=submit]');
+      await pa.waitForFunction(() => document.querySelector('.login__msg')?.textContent || document.querySelector('#login input[autocomplete=new-password]') || document.querySelector('#login').hidden, null, { timeout: 15000 });
+      const msg = await pa.locator('.login__msg').first().innerText().catch(() => '');
+      await pa.evaluate(() => { const m = document.querySelector('.login__msg'); if (m) m.textContent = ''; });
+      return msg;
+    };
+    const mErrada = await tentar('S1001', 'senhaErrada1!');
+    const mInexistente = await tentar('Z9999', 'senhaErrada1!');
+    registrar('2.2', 'Senha errada e matrícula inexistente dão a mesma mensagem', mErrada === mInexistente && /inválidas/.test(mErrada), mErrada);
+    for (let i = 0; i < 4; i++) await tentar('S1001', `errada${i}X!`);
+    const mBloq = await tentar('S1001', SENHA_INICIAL);
+    registrar('2.3', 'Bloqueio após 5 tentativas (nem a senha certa entra)', /bloqueado/.test(mBloq), mBloq);
+
+    await pa.reload();
+    await pa.fill('#login input[autocomplete=username]', 'INS01');
+    await pa.fill('#login input[autocomplete=current-password]', SENHA_INICIAL);
+    await pa.click('#login button[type=submit]');
+    await pa.waitForSelector('#login input[autocomplete=new-password]');
+    const [s1, s2] = await pa.locator('#login input[autocomplete=new-password]').all();
+    await s1.fill('abc12345'); await s2.fill('abc12345');
+    await pa.click('#login button[type=submit]');
+    await pa.waitForTimeout(400);
+    const mFraca = await pa.locator('.login__msg').innerText();
+    registrar('2.x', 'Política recusa senha fraca na troca obrigatória', /fora da política/.test(mFraca), mFraca.slice(0, 90));
+    await s1.fill(SENHA_NOVA); await s2.fill(SENHA_NOVA);
+    await pa.click('#login button[type=submit]');
+    await pa.waitForFunction(() => document.querySelector('#login').hidden, null, { timeout: 15000 });
+    pa.__trocadas = new Set(['INS01']);
+    const da = await dados(pa);
+    const ui = da.usuarios.find((u) => u.matricula === 'INS01');
+    const json = JSON.stringify(da);
+    registrar('2.5', 'Senha guardada só como hash PBKDF2 com sal (nunca em texto)', ui.credencial?.hash && ui.credencial.salt && ui.credencial.iteracoes >= 210000 && !json.includes(SENHA_NOVA), `PBKDF2 ${ui.credencial?.iteracoes} iterações · texto da senha ausente dos dados`);
+
+    // Inatividade: atividade "antiga" → tela bloqueia; desbloqueio pede a senha
+    await pa.evaluate(() => { const k = 'redeviva-sessao'; const s = JSON.parse(sessionStorage.getItem(k)); s.atividade -= 21 * 60000; sessionStorage.setItem(k, JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
+    await pa.waitForTimeout(300);
+    const bloqueada = await pa.locator('#login h2').innerText().catch(() => '');
+    await pa.fill('#login input[autocomplete=current-password]', SENHA_NOVA);
+    await pa.click('#login button[type=submit]');
+    await pa.waitForFunction(() => document.querySelector('#login').hidden, null, { timeout: 15000 });
+    registrar('2.7', 'Inatividade bloqueia a tela e o desbloqueio exige senha', /inatividade/.test(bloqueada), bloqueada);
+
+    // Logout invalida a sessão: recarregar volta ao login
+    await sairDoApp(pa);
+    await pa.reload();
+    await pa.waitForTimeout(500);
+    registrar('2.6', 'Logout encerra a sessão (recarregar exige login)', await pa.locator('#login input[autocomplete=username]').isVisible(), 'tela de login após recarregar');
+
+    // Gestor bloqueia um usuário → login dele é recusado; auditor só lê
+    await entrar(pa, 'Gestão de Planejamento');
+    await pa.click('.nav__btn[data-view=acesso]');
+    await pa.click('.abas__btn:has-text("Usuários")');
+    await pa.locator('tr:has-text("POD01") button:has-text("Bloquear")').click();
+    await pa.waitForTimeout(300);
+    await sairDoApp(pa);
+    const mBloqueado = await tentar('POD01', SENHA_INICIAL);
+    registrar('2.10', 'Usuário bloqueado pelo gestor não entra (mensagem genérica)', /inválidas/.test(mBloqueado), mBloqueado);
+    await entrar(pa, 'Auditoria Interna');
+    const navAud = (await pa.locator('.nav__btn').allInnerTexts()).join(',').replace(/\n/g, ' ');
+    const audTenta = await pa.evaluate(async () => {
+      const auth = await import('./js/auth.js'); const { estado } = await import('./js/store.js');
+      try { auth.adminDefinirAtivo(estado.dados.usuarios[0], false); return 'PERMITIDO'; } catch (e) { return `bloqueado (${e.message})`; }
+    });
+    registrar('3.5', 'Auditoria só consulta (sem mapa/plano; administração negada)', !/Mapa|Plano/.test(navAud) && /Acesso/.test(navAud) && audTenta.startsWith('bloqueado'), `${navAud} · admin: ${audTenta}`);
+
+    // Logs: tudo registrado, sem senha, íntegro e à prova de adulteração
+    const logs = await pa.evaluate(async () => (await import('./js/auditoria.js')).todosLogs());
+    const cats = [...new Set(logs.map((l) => l.categoria))].sort();
+    const acoes = new Set(logs.map((l) => l.acao));
+    const esperadas = ['LOGIN_FALHA', 'BLOQUEIO_POR_TENTATIVAS', 'LOGIN_DURANTE_BLOQUEIO', 'SENHA_ALTERADA', 'LOGIN_SUCESSO', 'SESSAO_BLOQUEADA_INATIVIDADE', 'SESSAO_DESBLOQUEADA', 'LOGOUT', 'TELA_ABERTA', 'USUARIO_BLOQUEADO', 'ADMIN_NEGADO', 'SENHA_RECUSADA_POLITICA'];
+    const faltam = esperadas.filter((a) => !acoes.has(a));
+    registrar('LOG-1', 'Ações de usuário registradas no log (login, bloqueios, senha, navegação, admin, negações)', !faltam.length, faltam.length ? `faltam: ${faltam.join(', ')}` : `${logs.length} registros · categorias: ${cats.join(', ')}`);
+    const vazou = JSON.stringify(logs).includes(SENHA_NOVA) || JSON.stringify(logs).includes(SENHA_INICIAL) || JSON.stringify(logs).includes('senhaErrada1!');
+    registrar('LOG-2', 'Nenhuma senha (certa ou errada) aparece no log', !vazou, vazou ? 'SENHA NO LOG' : 'varredura do log inteiro');
+    const integ = await pa.evaluate(async () => (await import('./js/auditoria.js')).verificarIntegridade());
+    const adulterado = await pa.evaluate(async () => {
+      const { idb } = await import('./js/store.js'); const a = await import('./js/auditoria.js');
+      const r = await idb('logs', 'readonly', (s) => s.get(3));
+      r.acao = 'LOGIN_SUCESSO'; r.resultado = 'OK';
+      await idb('logs', 'readwrite', (s) => s.put(r));
+      return a.verificarIntegridade();
+    });
+    registrar('LOG-3', 'Cadeia de hash detecta registro adulterado', integ.ok && !adulterado.ok, `antes: íntegro (${integ.total}) · depois de alterar o registro 3: ${adulterado.motivo}`);
+    await ca.close();
+
     // ================= Trabalho offline por alimentador =================
     const ctxo = await browser.newContext({ viewport: { width: 1280, height: 820 } });
     const po = await ctxo.newPage();
@@ -180,8 +289,8 @@ function registrar(id, nome, passou, evidencia) {
     // Sem rede de verdade: recarrega e o mapa do corredor vem do pacote
     await ctxo.setOffline(true);
     await po.reload();
-    await po.waitForSelector('.login__btn, .nav__btn', { timeout: 10000 });
-    if (await po.locator('.login__btn').count()) await entrar(po, 'Equipe Inspeção 01');
+    await po.waitForSelector('#login input[autocomplete=username], .nav__btn', { timeout: 10000 });
+    if (await po.locator('#login').isVisible()) await entrar(po, 'Equipe Inspeção 01');
     await po.fill('.busca__inp', 'P-07-010');
     await po.click('.busca__item');
     await po.waitForTimeout(2500);
@@ -226,8 +335,8 @@ function registrar(id, nome, passou, evidencia) {
     await p2.waitForTimeout(800);
     await ctx2.setOffline(true);
     await p2.reload();
-    await p2.waitForSelector('.login__btn', { timeout: 8000 }).catch(() => {});
-    registrar('8.3b', 'App abre sem rede (service worker)', await p2.locator('.login__btn').count() > 0, 'recarregado com rede cortada');
+    await p2.waitForSelector('#login input[autocomplete=username]', { timeout: 8000 }).catch(() => {});
+    registrar('8.3b', 'App abre sem rede (service worker)', await p2.locator('#login input[autocomplete=username]').count() > 0, 'recarregado com rede cortada');
     await ctx2.setOffline(false);
     await p2.setContent(`<iframe src="${BASE}" width="600" height="400"></iframe>`);
     await p2.waitForTimeout(1500);
@@ -254,7 +363,7 @@ function registrar(id, nome, passou, evidencia) {
       await m.screenshot({ path: path.join(SAIDA, `360-${tela}.png`) });
     };
     await medir('login');
-    await m.click('.login__btn:has-text("Equipe Inspeção 02")');
+    await entrar(m, 'Equipe Inspeção 02');
     await medir('mapa');
     await m.click('#ctrl-mais'); await medir('mapa-mais'); await m.click('#ctrl-mais');
     await m.click('#ctrl-filtros'); await medir('filtros'); await m.click('#ctrl-filtros');
@@ -275,11 +384,11 @@ function registrar(id, nome, passou, evidencia) {
     registrar('8.9', 'Botão voltar do celular fecha o painel sem sair do app', await m.locator('#sheet').isHidden() && m.url().includes('/app/'), m.url());
     await m.click('.nav__btn[data-view=defeitos]'); await medir('defeitos');
     await m.click('.nav__btn[data-view=producao]'); await medir('producao');
-    await m.click('#btn-usuario'); await m.click('text=Trocar usuário');
-    await m.click('.login__btn:has-text("Gestão de Planejamento")');
+    await entrar(m, 'Gestão de Planejamento');
     await m.click('.nav__btn[data-view=painel]'); await medir('painel');
     await m.click('.nav__btn[data-view=plano]'); await medir('plano');
-    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '12 telas verificadas');
+    await m.click('.nav__btn[data-view=acesso]'); await m.waitForTimeout(500); await medir('acesso');
+    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '13 telas verificadas');
     registrar('8.2', 'Alvos de toque ≥ 48 px', !pequenos.length, pequenos.length ? `${pequenos.length} abaixo: ${pequenos.slice(0, 6).join('; ')}` : 'todos os controles visíveis ≥ 48 px');
     await ctx3.close();
 

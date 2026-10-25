@@ -15,6 +15,7 @@ import {
 } from './dominio.js';
 import { concluirInspecao, transicionar, atribuirInspecao, ErroRegra } from './acoes.js';
 import { campoFotos, galeria } from './fotos.js';
+import { logar } from './auditoria.js';
 
 // ---------- Sheet (com integração ao botão "voltar" do celular) ----------
 let atual = null; // { tipo: 'ativo'|'area'|'form', id }
@@ -183,7 +184,7 @@ export function cartaoDefeito(f, { comAtivo = false, aoAbrirAtivo } = {}) {
     acoes.append(acaoComTexto('Devolver', 'Motivo da devolução', (j) => exec('PROGRAMADO', { equipeId: retorno, justificativa: j })));
   }
   if (podeTransicionar(u, f, 'CANCELADO')) acoes.append(acaoComTexto('Cancelar', 'Justificativa do cancelamento', (j) => exec('CANCELADO', { justificativa: j })));
-  if (comAtivo && aoAbrirAtivo) acoes.append(el('button', { type: 'button', class: 'btn btn--txt', text: 'Ver no mapa', onclick: () => aoAbrirAtivo(a.id) }));
+  if (comAtivo && aoAbrirAtivo && estado.usuario.perfil !== 'AUDITOR') acoes.append(el('button', { type: 'button', class: 'btn btn--txt', text: 'Ver no mapa', onclick: () => aoAbrirAtivo(a.id) }));
   if (acoes.childElementCount) card.append(acoes);
   return card;
 }
@@ -224,7 +225,7 @@ export function abrirAtivo(id) {
   else principal = { texto: 'Registrar inspeção avulsa / defeito', fn: () => abrirFormInspecao({ ativos: [a], inspecoes: [], avulsa: true }) };
 
   const secundarias = el('div', { class: 'ficha__acoes' },
-    el('a', { class: 'btn btn--sec', href: `https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lon}`, target: '_blank', rel: 'noopener noreferrer', text: '🧭 Rota até aqui' }));
+    el('a', { class: 'btn btn--sec', href: `https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lon}`, target: '_blank', rel: 'noopener noreferrer', text: '🧭 Rota até aqui', onclick: () => logar({ categoria: 'LEITURA', acao: 'ROTA_ABERTA', entidade: 'ativo', entidadeId: a.id }) }));
   if (!principal.texto.startsWith('Registrar inspeção avulsa')) secundarias.append(el('button', { type: 'button', class: 'btn btn--txt', text: 'Inspeção avulsa / defeito', onclick: () => abrirFormInspecao({ ativos: [a], inspecoes: [], avulsa: true }) }));
   corpo.append(secundarias);
 
@@ -466,7 +467,7 @@ export function abrirArea(ativos, aoLimpar) {
       linhaMeta('Inspeções pendentes', String(pend.length)),
       linhaMeta('Defeitos abertos', String(abertos.length))),
     el('ul', { class: 'lista' }, comPend.map((a) => el('li', { class: 'lista__item pequeno' },
-      el('button', { type: 'button', class: 'btn btn--txt', text: `${TIPOS_ATIVO[a.tipo]} ${a.codigo}`, onclick: () => abrirAtivo(a.id) }),
+      el('button', { type: 'button', class: 'btn btn--txt', text: `${TIPOS_ATIVO[a.tipo]} ${a.codigo}`, onclick: () => { logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: a.id }); abrirAtivo(a.id); } }),
       el('span', { class: 'muted', text: pend.filter((i) => i.ativoId === a.id).map((i) => criterio(i.criterioId)?.nome).join(', ') })))),
     el('button', { type: 'button', class: 'btn btn--txt', text: 'Limpar seleção', onclick: () => { aoLimpar(); fecharSheet(); } }),
   );

@@ -1,11 +1,12 @@
 // Service worker: app shell em network-first (pega atualização quando há rede) e tiles em cache-first.
-const VERSAO = 'redeviva-v2';
+const VERSAO = 'redeviva-v3';
 const TILES = 'redeviva-tiles';
+const PACOTES = 'redeviva-pacotes'; // mapas dos pacotes offline: nunca aparados automaticamente
 const MAX_TILES = 1500;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'css/app.css',
   'vendor/leaflet/leaflet.css', 'vendor/leaflet/leaflet.js',
-  'js/main.js', 'js/config.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/mapa.js', 'js/ui.js', 'js/telas.js', 'js/acoes.js', 'js/fotos.js',
+  'js/main.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/mapa.js', 'js/ui.js', 'js/telas.js', 'js/acoes.js', 'js/fotos.js', 'js/offline.js', 'js/config.js',
   'modelos/template-plano.csv', 'modelos/exemplo-plano-com-erros.csv',
 ];
 
@@ -15,7 +16,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((ks) => Promise.all(ks.filter((k) => k !== VERSAO && k !== TILES).map((k) => caches.delete(k))))
+    .then((ks) => Promise.all(ks.filter((k) => ![VERSAO, TILES, PACOTES].includes(k)).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -30,7 +31,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.hostname === 'tile.openstreetmap.org') {
     e.respondWith(caches.open(TILES).then(async (c) => {
-      const hit = await c.match(req.url);
+      const hit = await caches.match(req.url); // procura no cache geral e nos pacotes
       if (hit) return hit;
       const r = await fetch(req);
       if (r.ok) { c.put(req.url, r.clone()); aparar(c); }

@@ -5,7 +5,7 @@ import { estado, equipeDoUsuario } from './store.js';
 import { estadoAtivo, pendenciasDaEquipe, tipoDefeito, STATUS_ABERTOS, TIPOS_ATIVO } from './dominio.js';
 
 const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-let mapa, grupoAtivos, grupoTrechos, marcadorUsuario, circuloUsuario, retangulo;
+let mapa, camadaRuas, grupoAtivos, grupoTrechos, marcadorUsuario, circuloUsuario, retangulo;
 let modo = null, cantoA = null, retornos = {};
 
 export const filtros = {
@@ -19,7 +19,7 @@ export function iniciarMapa(container, cb) {
   retornos = cb;
   mapa = L.map(container, { zoomControl: false, preferCanvas: false }).setView([-15.836, -48.058], 14);
   L.control.zoom({ position: 'bottomright' }).addTo(mapa);
-  L.tileLayer(URL_TILES, {
+  camadaRuas = L.tileLayer(URL_TILES, {
     maxZoom: 19, crossOrigin: 'anonymous',
     attribution: '&copy; OpenStreetMap',
   }).addTo(mapa);
@@ -128,31 +128,12 @@ export function ativosNaArea(bounds) {
   return estado.dados.ativos.filter((a) => bounds.contains([a.lat, a.lon]));
 }
 
-/**
- * Pré-carrega tiles da área visível para uso offline. Limite de 200 tiles respeita a política de uso
- * do OpenStreetMap; em produção usar servidor de tiles próprio.
- */
-export async function baixarAreaOffline() {
-  const z0 = mapa.getZoom(), b = mapa.getBounds();
-  const tiles = [];
-  for (let z = z0; z <= Math.min(z0 + 2, 18); z++) {
-    const p1 = mapa.project(b.getNorthWest(), z).divideBy(256).floor();
-    const p2 = mapa.project(b.getSouthEast(), z).divideBy(256).floor();
-    for (let x = p1.x; x <= p2.x; x++) for (let y = p1.y; y <= p2.y; y++) tiles.push(URL_TILES.replace('{z}', z).replace('{x}', x).replace('{y}', y));
-  }
-  if (tiles.length > 200) {
-    toast(`Área grande demais (${tiles.length} tiles). Aproxime o mapa e tente de novo.`, { tipo: 'erro' });
-    return;
-  }
-  if (!('caches' in window)) { toast('Navegador sem suporte a cache offline.', { tipo: 'erro' }); return; }
-  const cache = await caches.open('redeviva-tiles');
-  let ok = 0;
-  for (const u of tiles) {
-    try {
-      if (await cache.match(u)) { ok++; continue; }
-      const r = await fetch(u, { mode: 'cors' });
-      if (r.ok) { await cache.put(u, r); ok++; }
-    } catch { /* sem rede: segue */ }
-  }
-  toast(`Mapa offline: ${ok} de ${tiles.length} tiles disponíveis nesta área.`, { tipo: ok === tiles.length ? 'ok' : 'aviso' });
+export const urlTile = (z, x, y) => URL_TILES.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+
+/** Mapa leve: só a rede desenhada, sem fundo de ruas (não consome internet). */
+export function definirFundo(leve) {
+  if (!mapa) return;
+  if (leve && mapa.hasLayer(camadaRuas)) camadaRuas.remove();
+  if (!leve && !mapa.hasLayer(camadaRuas)) camadaRuas.addTo(mapa);
+  container().classList.toggle('mapa--leve', leve);
 }

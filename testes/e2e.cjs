@@ -23,7 +23,7 @@ function registrar(id, nome, passou, evidencia) {
   const browser = await chromium.launch();
   const erros = [];
   const vigiar = (p) => {
-    p.on('console', (m) => { if (m.type() === 'error' && !/tile\.openstreetmap|net::ERR/.test(m.text())) erros.push(m.text()); });
+    p.on('console', (m) => { if (m.type() === 'error' && !/tile\.openstreetmap|net::ERR|status of 504/.test(m.text())) erros.push(m.text()); });
     p.on('pageerror', (e) => erros.push(e.message));
   };
   const dados = (p) => p.evaluate(() => new Promise((res) => { const q = indexedDB.open('redeviva'); q.onsuccess = () => { const g = q.result.transaction('kv').objectStore('kv').get('dados'); g.onsuccess = () => res(g.result); }; }));
@@ -153,8 +153,66 @@ function registrar(id, nome, passou, evidencia) {
     await p.click('#btn-usuario'); await p.click('text=Voltar a ficar online');
     await p.waitForTimeout(1200);
     const apos = await p.locator('#st-sync').innerText();
-    registrar('8.3', 'Offline: fila local e sincronização ao reconectar', /pendente/.test(fila) && /Sincronizado/.test(apos), `${fila} → ${apos}`);
+    registrar('8.3', 'Offline: fila local e sincronização ao reconectar', /a enviar/.test(fila) && /Sincronizado/.test(apos), `${fila} → ${apos}`);
     await ctx.close();
+
+    // ================= Trabalho offline por alimentador =================
+    const ctxo = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+    const po = await ctxo.newPage();
+    vigiar(po);
+    await po.goto(BASE);
+    await po.waitForFunction(() => navigator.serviceWorker.ready.then(() => true));
+    await po.reload();
+    await entrar(po, 'Equipe Inspeção 01');
+    await po.click('#ctrl-mais');
+    await po.click('#ctrl-offline');
+    await po.selectOption('#sheet select', 'ALM-07');
+    await po.waitForTimeout(400);
+    const estim = (await po.locator('#sheet .meta-grupo').innerText()).replace(/\n/g, ' ');
+    await po.click('#sheet-rodape button');
+    await po.waitForFunction(() => [...document.querySelectorAll('.toast')].some((t) => /Pacote ALM-07/.test(t.textContent)), null, { timeout: 90000 });
+    let dpo = await dados(po);
+    const pac = dpo.pacotes['ALM-07'];
+    registrar('OFF-1', 'Pacote do alimentador: recorte leve de dados + mapa só do corredor', pac.bytesDados < 150 * 1024 && pac.tilesTotal <= 250 && pac.tilesOk > 0,
+      `${pac.itens.ativos} ativos, ${pac.itens.inspecoes} inspeções, ${pac.itens.defeitos} defeitos · dados ${Math.round(pac.bytesDados / 1024)} KB (${Math.round((pac.bytesGzip || 0) / 1024)} KB gzip) · mapa ${pac.tilesOk}/${pac.tilesTotal} quadros`);
+    console.log('   estimativa exibida:', estim);
+
+    // Sem rede de verdade: recarrega e o mapa do corredor vem do pacote
+    await ctxo.setOffline(true);
+    await po.reload();
+    await po.waitForSelector('.login__btn, .nav__btn', { timeout: 10000 });
+    if (await po.locator('.login__btn').count()) await entrar(po, 'Equipe Inspeção 01');
+    await po.fill('.busca__inp', 'P-07-010');
+    await po.click('.busca__item');
+    await po.waitForTimeout(2500);
+    const quadros = await po.locator('.leaflet-tile-loaded').count();
+    registrar('OFF-2', 'Sem internet, o mapa do corredor abre a partir do pacote', quadros > 0, `${quadros} quadros de mapa carregados offline`);
+
+    // Mapa leve: zero quadros, rede continua visível
+    await po.evaluate(async () => (await import('./js/offline.js')).definirMapaLeve(true));
+    await po.waitForTimeout(300);
+    const quadrosLeve = await po.locator('.leaflet-tile').count();
+    const marcadores = await po.locator('.mk-wrap').count();
+    registrar('OFF-3', 'Mapa leve mostra só a rede, sem baixar fundo', quadrosLeve === 0 && marcadores > 0, `${marcadores} ativos visíveis, ${quadrosLeve} quadros de fundo`);
+    await po.evaluate(async () => (await import('./js/offline.js')).definirMapaLeve(false));
+
+    // Rede móvel: registros sobem, fotos esperam o Wi-Fi
+    await ctxo.setOffline(false);
+    const filaRede = await po.evaluate(async () => {
+      const st = await import('./js/store.js');
+      st.estado.redeMovelSimulada = true;
+      await st.salvarFoto(new Blob([new Uint8Array(40000)], { type: 'image/jpeg' }));
+      st.registrar('TESTE_REGISTRO', 'teste', 'x');
+      await new Promise((r) => setTimeout(r, 1200));
+      const em4g = st.resumoFila();
+      st.estado.redeMovelSimulada = false;
+      st.sincronizar();
+      await new Promise((r) => setTimeout(r, 1200));
+      return { em4g, wifi: st.resumoFila() };
+    });
+    registrar('OFF-4', 'Na rede móvel os registros sobem e as fotos aguardam o Wi-Fi', filaRede.em4g.dados === 0 && filaRede.em4g.fotos >= 1 && filaRede.wifi.total === 0,
+      `4G: ${filaRede.em4g.dados} registros / ${filaRede.em4g.fotos} foto(s) na fila → Wi-Fi: ${filaRede.wifi.total}`);
+    await ctxo.close();
 
     // ================= Fase 8 — PWA, recarga sem rede, anti-iframe =================
     const ctx2 = await browser.newContext();

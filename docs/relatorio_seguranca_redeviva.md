@@ -84,6 +84,7 @@ Legenda: ✅ passou com evidência · ⚠️ problema · ❓ verificar fora do c
 | 8.5 Fotos comprimidas | ✅ | ≤ 1280 px, JPEG 72% |
 | 8.6 Date picker nativo | ℹ️ | Sem campos de data no app de campo |
 | 8.9 Botão voltar | ✅ | Fecha o painel sem sair do app (e2e `8.9`) |
+| Pacote offline por alimentador | ✅ | Recorte de 26 KB + mapa do corredor; abre sem internet; fotos retidas em rede móvel (e2e `OFF-1` a `OFF-4`) |
 
 ### Fase 9 (nova, v1.1) — Dados no aparelho e privacidade
 | # | Resultado | Evidência / ação |
@@ -91,13 +92,13 @@ Legenda: ✅ passou com evidência · ⚠️ problema · ❓ verificar fora do c
 | 9.1 Dado local some ao trocar de usuário | ⚠️ | Hoje os dados ficam no IndexedDB para todos os perfis (é demo). Produção: dados por usuário + limpeza no logout + remote wipe (MDM) |
 | 9.2 Localização só em uso | ✅ | GPS só liga com toque do usuário; não há rastreamento em segundo plano |
 | 9.3 Metadados de foto | ✅ | EXIF original descartado; só os campos controlados pelo app (data, coordenada, equipe) vão na marca d'água |
-| 9.4 Cache do service worker | ✅ | Só arquivos do app e tiles de mapa; nada de dados de negócio no Cache Storage |
+| 9.4 Cache do service worker | ✅ | Só arquivos do app e quadros de mapa; o recorte de dados do pacote fica no IndexedDB, não no Cache Storage |
 
 ## Como reexecutar
 
 ```bash
 bash testes/seguranca-estatica.sh                 # fases 1.3/1.4, 6 e 8 (estático)
-cd testes && npm install && npx playwright install chromium && npm run e2e   # 18 verificações ponta a ponta
+cd testes && npm install && npx playwright install chromium && npm run e2e   # 22 verificações ponta a ponta
 bash testes/headers.sh https://SEU-DOMINIO/app/   # fase 1, após publicar
 ```
 

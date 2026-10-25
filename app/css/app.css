@@ -407,3 +407,11 @@ select.campo__input { width: auto; max-width: 100%; }
 .mais-filtros { margin-bottom: .8rem; }
 .mais-filtros summary { min-height: var(--alvo); display: flex; align-items: center; cursor: pointer; font-weight: 600; color: var(--primaria); }
 .leaflet-touch .leaflet-bar a, .leaflet-bar a { width: var(--alvo); height: var(--alvo); line-height: var(--alvo); font-size: 22px; }
+
+/* ---------- Mapa leve (sem fundo de ruas, zero download) ---------- */
+#mapa.mapa--leve {
+  background-color: #eef3f0;
+  background-image: linear-gradient(rgba(0, 0, 0, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, .06) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+#mapa.mapa--leve .tronco { stroke-opacity: 1; stroke-width: 6; }

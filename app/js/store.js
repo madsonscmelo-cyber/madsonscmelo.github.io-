@@ -60,6 +60,10 @@ export function persistir() {
 export async function salvarFoto(blob) {
   const id = uid('foto');
   await idb('fotos', 'readwrite', (s) => s.put(blob, id));
+  // Foto entra na fila separada dos registros: o texto sobe primeiro, a foto pode esperar o Wi-Fi.
+  estado.dados.fila.push({ id: uid('op'), tipo: 'foto', entidadeId: id, bytes: blob.size, em: new Date().toISOString() });
+  persistir();
+  emitir('sync');
   return id;
 }
 export const obterFoto = (id) => idb('fotos', 'readonly', (s) => s.get(id));
@@ -94,23 +98,39 @@ export function registrar(acao, entidade, entidadeId, detalhe = {}) {
   const d = estado.dados;
   d.auditoria.unshift({ id: uid('aud'), em, usuario: estado.usuario?.id, perfil: estado.usuario?.perfil, acao, entidade, entidadeId, detalhe });
   d.auditoria.length = Math.min(d.auditoria.length, 1000);
-  d.fila.push({ id: uid('op'), acao, entidade, entidadeId, em });
+  d.fila.push({ id: uid('op'), tipo: 'dados', acao, entidade, entidadeId, em, bytes: JSON.stringify(detalhe).length + 120 });
   // Grava imediatamente: dado de campo não pode depender de a aba continuar aberta.
   persistir();
   emitir('mudou');
   sincronizar();
 }
 
-/** Simula o envio da fila ao servidor quando há conexão. */
+export function resumoFila() {
+  const f = estado.dados.fila;
+  const dados = f.filter((o) => o.tipo !== 'foto'), fotos = f.filter((o) => o.tipo === 'foto');
+  const soma = (l) => l.reduce((t, o) => t + (o.bytes || 0), 0);
+  return { total: f.length, dados: dados.length, fotos: fotos.length, bytesDados: soma(dados), bytesFotos: soma(fotos) };
+}
+
+/** Wi-Fi ou rede desconhecida = libera fotos; rede móvel informada pelo navegador = segura as fotos. */
+export function redeMovel() {
+  if (estado.redeMovelSimulada) return true;
+  const c = navigator.connection;
+  return !!c && (c.type === 'cellular' || ['slow-2g', '2g', '3g'].includes(c.effectiveType));
+}
+
+/** Simula o envio da fila ao servidor: registros sempre primeiro; fotos só fora da rede móvel, se configurado. */
 export function sincronizar() {
   const d = estado.dados;
-  if (!online() || !d.fila.length) { emitir('sync'); return; }
+  const segurarFotos = (d.config?.fotosSoWifi ?? true) && redeMovel();
+  const lote = online() ? d.fila.filter((o) => o.tipo !== 'foto' || !segurarFotos) : [];
+  if (!lote.length) { emitir('sync'); return; }
   setTimeout(() => {
     if (!online()) return;
-    const n = d.fila.length;
-    d.fila = [];
+    const ids = new Set(lote.map((o) => o.id));
+    d.fila = d.fila.filter((o) => !ids.has(o.id));
     d.ultimaSync = new Date().toISOString();
     persistir();
-    emitir('sync', { enviados: n });
+    emitir('sync', { enviados: lote.length, fotosRetidas: d.fila.filter((o) => o.tipo === 'foto').length });
   }, 600);
 }

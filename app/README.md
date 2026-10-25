@@ -36,6 +36,16 @@ No celular, a instalação como app (PWA) exige HTTPS — por exemplo, publicand
 | Produção da equipe e ranking ponderado por tipo de equipe (com penalidade por rejeição e estorno por reincidência) | RF-EQP-04, 05, §8 |
 | Offline-first: tudo grava no IndexedDB do aparelho; fila de sincronização visível; modo offline simulável | RF-INS-06, RNF-01 |
 
+## Trabalho offline por alimentador
+
+Menu **⋯ Mais → 📦 Trabalho offline** (fazer na base, com Wi-Fi):
+
+- **Recorte de dados do alimentador**: ativos, inspeções pendentes e defeitos abertos, com histórico resumido. Exemplo ALM-07: 58 ativos, 31 inspeções e 8 defeitos = **26 KB (4 KB compactado)**.
+- **Mapa só do corredor**: faixa de 200 m em volta da rede, zooms 14–17. Exemplo ALM-07: 95 quadros ≈ **1,7 MB** (um retângulo cobrindo o mesmo alimentador seria várias vezes maior). Limite de 250 quadros por pacote.
+- **Mapa leve**: só a rede desenhada, sem fundo de ruas, **0 KB**. É oferecido automaticamente quando a conexão cai sem pacote baixado.
+- **Envio em duas filas**: os registros (texto, poucos KB) sobem assim que houver qualquer sinal; as fotos podem esperar o Wi-Fi.
+- Pacote vale 7 dias; depois disso aparece como vencido para ser atualizado.
+
 ## Usabilidade (as 7 leis)
 
 Aplicadas e testadas — detalhes em [`docs/guia_usabilidade_redeviva.md`](../docs/guia_usabilidade_redeviva.md):
@@ -49,7 +59,7 @@ destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (M
 bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e
 ```
-Resultado atual: 18/18 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+Resultado atual: 22/22 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
 
 ## Roteiro de demonstração (cenário §14 da especificação)
 
@@ -70,7 +80,7 @@ Resultado atual: 18/18 verificações ponta a ponta e 0 pendências estáticas �
 | Escolha de perfil na tela inicial | SSO corporativo (OIDC) com MFA |
 | Permissões checadas no navegador | Checadas na API + Row Level Security por território no PostgreSQL |
 | Fila de sincronização sem servidor | API com sync incremental e resolução de conflitos |
-| Tiles do OpenStreetMap (limite de uso) | Servidor de tiles próprio (PMTiles) com download offline por área de trabalho |
+| Tiles do OpenStreetMap (limite de 250 quadros por pacote) | Servidor de mapas próprio (PMTiles): um arquivo por alimentador/polo, sem limite de uso |
 | Alerta de proximidade com o app aberto | Geofence nativo via Capacitor (funciona com o app em segundo plano) |
 | Indicadores de continuidade fixos | Integração com OMS/ADMS, GIS e SAP PM |
 

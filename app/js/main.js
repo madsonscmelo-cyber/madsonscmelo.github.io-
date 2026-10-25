@@ -1,6 +1,7 @@
 // Orquestração: sessão, navegação, GPS, alertas de proximidade, filtros do mapa e service worker.
 import { el, $, $$, toast, distanciaM, hojeISO, somarDias, fmtDataHora } from './util.js';
-import { estado, eventos, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId, rascunhosDoUsuario } from './store.js';
+import { estado, eventos, carregar, registrar, online, sincronizar, resetarDados, equipeDoUsuario, ativoPorId, rascunhosDoUsuario, resumoFila } from './store.js';
+import { abrirTrabalhoOffline, config as configOffline, definirMapaLeve } from './offline.js';
 import { validarConfig } from './config.js';
 import { PERFIS, TIPOS_EQUIPE, TIPOS_ATIVO, RAIO_ALERTA_M, pendenciasDaEquipe } from './dominio.js';
 import * as mapa from './mapa.js';
@@ -111,7 +112,8 @@ function atualizarTopo() {
   rede.textContent = on ? 'Online' : estado.offlineSimulado ? 'Offline (simulado)' : 'Offline';
   rede.className = `chip ${on ? 'chip--ok' : 'chip--alerta'}`;
   const sync = $('#st-sync');
-  sync.textContent = d.fila.length ? `${d.fila.length} pendente(s) de envio` : d.ultimaSync ? `Sincronizado ${fmtDataHora(d.ultimaSync)}` : 'Sem pendências';
+  const f = resumoFila();
+  sync.textContent = f.total ? `${f.dados ? `${f.dados} registro(s)` : ''}${f.dados && f.fotos ? ' · ' : ''}${f.fotos ? `${f.fotos} foto(s)` : ''} a enviar` : d.ultimaSync ? `Sincronizado ${fmtDataHora(d.ultimaSync)}` : 'Sem pendências';
   sync.className = `chip ${d.fila.length ? 'chip--aviso' : ''}`;
   if (estado.usuario) $('#btn-usuario').textContent = `${estado.usuario.nome} ▾`;
 }
@@ -123,8 +125,12 @@ function menuUsuario() {
     el('div', { class: 'menu__info' }, el('strong', { text: estado.usuario.nome }), el('span', { class: 'muted', text: PERFIS[estado.usuario.perfil] })),
     el('button', { type: 'button', class: 'menu__item', text: estado.offlineSimulado ? 'Voltar a ficar online' : 'Simular modo offline', onclick: () => {
       estado.offlineSimulado = !estado.offlineSimulado; m.hidden = true; atualizarTopo(); sincronizar();
-      if (estado.offlineSimulado) houveOffline = true;
+      if (estado.offlineSimulado) aoFicarOffline();
       toast(estado.offlineSimulado ? 'Modo offline: registros ficam na fila local.' : 'Online: enviando fila.');
+    } }),
+    el('button', { type: 'button', class: 'menu__item', text: estado.redeMovelSimulada ? 'Voltar ao Wi-Fi' : 'Simular rede móvel (4G)', onclick: () => {
+      estado.redeMovelSimulada = !estado.redeMovelSimulada; m.hidden = true; sincronizar();
+      toast(estado.redeMovelSimulada ? 'Rede móvel: registros sobem, fotos aguardam o Wi-Fi.' : 'Wi-Fi: enviando fotos pendentes.');
     } }),
     el('button', { type: 'button', class: 'menu__item', text: 'Trocar usuário / perfil', onclick: () => { m.hidden = true; sair(); } }),
     estado.usuario.perfil === 'GESTOR' ? el('button', { type: 'button', class: 'menu__item menu__item--perigo', text: 'Restaurar dados de demonstração', onclick: async () => {
@@ -196,7 +202,7 @@ function montarControles() {
   const mais = el('div', { id: 'mapa-mais', class: 'mapa-mais', hidden: true },
     btn('🎯', 'Simular posição', () => { fecharMais(); pararGps(); mapa.definirModo('simular'); }, 'ctrl-simular'),
     btn('＋', 'Ponto avulso', () => { fecharMais(); mapa.definirModo('avulso'); }, 'ctrl-avulso'),
-    btn('⬇', 'Baixar mapa offline', () => { fecharMais(); mapa.baixarAreaOffline(); }, 'ctrl-offline'));
+    btn('📦', 'Trabalho offline', () => { fecharMais(); abrirTrabalhoOffline(); }, 'ctrl-offline'));
   $('#mapa-ctrl').replaceChildren(
     btn('📍', 'Minha posição', iniciarGps, 'ctrl-gps'),
     btn('▭', 'Selecionar área', () => mapa.definirModo('area'), 'ctrl-area'),
@@ -281,6 +287,16 @@ function aoModo(modo) {
   $('#ctrl-mais')?.classList.toggle('ctrl--ativo', modo === 'simular' || modo === 'avulso');
 }
 
+/** Sem internet: se não há pacote baixado, sugere o mapa leve para não ficar com o fundo cinza. */
+function aoFicarOffline() {
+  houveOffline = true;
+  if (configOffline().mapaLeve) return;
+  const temPacote = Object.keys(estado.dados.pacotes || {}).length > 0;
+  toast(temPacote ? 'Sem internet: usando o pacote offline. Registros ficam na fila.' : 'Sem internet e sem pacote baixado: use o mapa leve (só a rede).', {
+    tipo: 'aviso', duracao: 8000, acao: temPacote ? undefined : { texto: 'Mapa leve', fn: () => definirMapaLeve(true) },
+  });
+}
+
 // ---------------- Service worker ----------------
 function registrarSw() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -309,6 +325,7 @@ async function iniciar() {
     onSimular: (p) => aplicarPosicao({ ...p, precisao: 5, simulada: true }),
     onModo: aoModo,
   });
+  mapa.definirFundo(configOffline().mapaLeve);
   montarControles();
   $('#sheet-fechar').addEventListener('click', fecharSheet);
   $('#btn-usuario').addEventListener('click', menuUsuario);
@@ -318,10 +335,13 @@ async function iniciar() {
   eventos.addEventListener('rascunho', renderizarTopoMapa);
   eventos.addEventListener('sync', (e) => {
     atualizarTopo();
-    if (e.detail?.enviados && houveOffline) { houveOffline = false; toast(`Conexão restabelecida: ${e.detail.enviados} registro(s) sincronizado(s).`, { tipo: 'ok' }); }
+    if (e.detail?.enviados && houveOffline) {
+      houveOffline = false;
+      toast(`Conexão restabelecida: ${e.detail.enviados} item(ns) enviado(s)${e.detail.fotosRetidas ? ` · ${e.detail.fotosRetidas} foto(s) aguardam Wi-Fi` : ''}.`, { tipo: 'ok' });
+    }
   });
   window.addEventListener('online', () => { atualizarTopo(); sincronizar(); });
-  window.addEventListener('offline', () => { houveOffline = true; atualizarTopo(); });
+  window.addEventListener('offline', () => { aoFicarOffline(); atualizarTopo(); });
   setInterval(sincronizar, 15000);
 
   let salvo = null;

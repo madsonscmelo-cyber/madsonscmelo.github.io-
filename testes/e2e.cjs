@@ -273,6 +273,42 @@ function registrar(id, nome, passou, evidencia) {
     registrar('LOG-3', 'Cadeia de hash detecta registro adulterado', integ.ok && !adulterado.ok, `antes: íntegro (${integ.total}) · depois de alterar o registro 3: ${adulterado.motivo}`);
     await ca.close();
 
+    // ================= Recuperação de acesso na demonstração =================
+    const cr = await browser.newContext({ serviceWorkers: 'block' });
+    const pr = await cr.newPage();
+    vigiar(pr);
+    pr.on('dialog', (d) => d.accept());
+    await pr.goto(BASE);
+    await entrar(pr, 'Gestão de Planejamento');
+    // Atualização do app (versão de dados muda): a senha pessoal tem de sobreviver
+    await pr.evaluate(async () => { const { estado, persistir } = await import('./js/store.js'); estado.dados.versaoSchema = 1; await persistir(); });
+    await sairDoApp(pr);
+    await pr.reload();
+    await pr.fill('#login input[autocomplete=username]', 'g1001');
+    await pr.fill('#login input[autocomplete=current-password]', SENHA_NOVA);
+    await pr.click('#login button[type=submit]');
+    await pr.waitForTimeout(1500);
+    const manteve = await pr.locator('#login').isHidden();
+    registrar('2.11', 'Atualização dos dados de demonstração preserva a senha pessoal', manteve, manteve ? 'entrou com a senha pessoal após a atualização' : await pr.locator('.login__msg').innerText());
+    await sairDoApp(pr);
+    for (let i = 0; i < 5; i++) {
+      await pr.fill('#login input[autocomplete=username]', 'G1001');
+      await pr.fill('#login input[autocomplete=current-password]', `Errada${i}#xyz`);
+      await pr.click('#login button[type=submit]');
+      await pr.waitForTimeout(700);
+    }
+    const msgBloq = await pr.locator('.login__msg').innerText();
+    await pr.click('summary:has-text("Não consigo entrar")');
+    await pr.click('button:has-text("Restaurar a demonstração neste aparelho")');
+    await pr.waitForTimeout(800);
+    await pr.fill('#login input[autocomplete=username]', 'G1001');
+    await pr.fill('#login input[autocomplete=current-password]', SENHA_INICIAL);
+    await pr.click('#login button[type=submit]');
+    await pr.waitForSelector('#login input[autocomplete=new-password]', { timeout: 15000 }).catch(() => {});
+    const voltou = await pr.locator('#login input[autocomplete=new-password]').count() > 0;
+    registrar('2.12', 'Matrícula bloqueada: "Não consigo entrar" restaura a demonstração e a senha inicial volta a valer', /bloqueado/.test(msgBloq) && voltou, `bloqueio: "${msgBloq.slice(0, 50)}…" → senha inicial aceita após restaurar`);
+    await cr.close();
+
     // ================= Parâmetros, custos e programação =================
     const cp = await browser.newContext({ viewport: { width: 1366, height: 900 }, serviceWorkers: 'block' });
     const pp = await cp.newPage();

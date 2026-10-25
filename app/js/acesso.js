@@ -1,6 +1,7 @@
 // Telas de acesso: login, troca de senha, bloqueio por inatividade e administração (usuários, logs, política).
 import { el, $, toast, fmtDataHora, csvStringify, baixarArquivo, hojeISO } from './util.js';
-import { estado } from './store.js';
+import { estado, resetarDados } from './store.js';
+import { CONFIG } from './config.js';
 import { PERFIS, TIPOS_EQUIPE } from './dominio.js';
 import {
   POLITICA, ErroAuth, autenticar, trocarSenha, avaliarSenha, desbloquear,
@@ -59,9 +60,23 @@ export function telaLogin(aoEntrar) {
         el('strong', { text: `${u.matricula} · ${u.nome}` }), el('span', { class: 'muted', text: eq ? TIPOS_EQUIPE[eq.tipo] : PERFIS[u.perfil] }));
     })));
 
+  // Só na demonstração: sem servidor não há "esqueci a senha"; a saída é restaurar os dados deste aparelho.
+  const ajuda = CONFIG.modo === 'demo' ? el('details', { class: 'login__demo' }, el('summary', { text: 'Não consigo entrar' }),
+    el('ul', { class: 'pequeno regras-ajuda' },
+      el('li', { text: `Se nunca entrou neste aparelho (ou ele foi restaurado), use a senha inicial ${POLITICA.senhaInicialDemo}.` }),
+      el('li', { text: 'Se já criou sua senha, use a sua senha pessoal (a matrícula pode ser digitada em minúsculas).' }),
+      el('li', { text: `Após ${POLITICA.tentativasMaximas} erros a matrícula fica bloqueada por ${POLITICA.bloqueioMinutos} minutos. O gestor ou o administrador podem liberar antes.` })),
+    el('button', { type: 'button', class: 'btn btn--sec btn--largo', text: 'Restaurar a demonstração neste aparelho', onclick: async () => {
+      if (!confirm(`Apagar os dados de demonstração deste aparelho e voltar todas as matrículas para a senha inicial (${POLITICA.senhaInicialDemo})? O log de auditoria é mantido.`)) return;
+      logar({ categoria: 'SEGURANCA', acao: 'DEMO_RESTAURADA_NA_TELA_DE_LOGIN', resultado: 'OK' });
+      await resetarDados();
+      toast(`Demonstração restaurada. Entre com a senha inicial ${POLITICA.senhaInicialDemo}.`, { tipo: 'ok', duracao: 8000 });
+      telaLogin(aoEntrar);
+    } })) : null;
+
   box.replaceChildren(el('div', { class: 'login__cartao' }, marca(),
     el('p', { class: 'aviso-demo', text: 'Protótipo com dados sintéticos. Em produção o acesso é pelo login corporativo (SSO) com MFA.' }),
-    form, demo,
+    form, demo, ajuda,
     el('p', { class: 'pequeno muted', text: `Acesso monitorado: todas as ações são registradas. ${POLITICA.tentativasMaximas} tentativas erradas bloqueiam a matrícula por ${POLITICA.bloqueioMinutos} minutos.` })));
   box.hidden = false;
   mat.focus();

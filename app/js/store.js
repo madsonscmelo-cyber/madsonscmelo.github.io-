@@ -52,7 +52,19 @@ export const nomeEquipe = (id) => estado.dados.equipes.find((e) => e.id === id)?
 export async function carregar() {
   let d = null;
   try { d = await idb('kv', 'readonly', (s) => s.get('dados')); } catch { d = null; }
-  estado.dados = d && d.versaoSchema === VERSAO_SCHEMA ? d : gerarSeed();
+  if (d && d.versaoSchema === VERSAO_SCHEMA) estado.dados = d;
+  else {
+    estado.dados = gerarSeed();
+    // Atualização do app: os dados de demonstração são refeitos, mas as contas (senha pessoal, bloqueio pelo gestor)
+    // são preservadas pela matrícula. Bloqueios temporários por tentativa não são carregados.
+    if (d?.usuarios) {
+      const antigos = new Map(d.usuarios.filter((u) => u.matricula).map((u) => [u.matricula, u]));
+      for (const u of estado.dados.usuarios) {
+        const a = antigos.get(u.matricula);
+        if (a) Object.assign(u, { credencial: a.credencial ?? null, senhasAnteriores: a.senhasAnteriores, trocarSenha: a.trocarSenha ?? true, ativo: a.ativo !== false, ultimoAcesso: a.ultimoAcesso });
+      }
+    }
+  }
   await persistir();
 }
 

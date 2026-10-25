@@ -96,7 +96,7 @@ destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (M
 bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e
 ```
-Resultado atual: 45/45 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+Resultado atual: 47/47 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
 
 ## Roteiro de demonstração (cenário §14 da especificação)
 

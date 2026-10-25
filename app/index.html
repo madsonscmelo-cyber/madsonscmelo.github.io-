@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://tile.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0b5d3b">
+  <title>RedeViva — Plano de Manutenção</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo__marca"><img src="icon.svg" alt="" width="28" height="28"><span>RedeViva</span></div>
+    <div class="topo__status">
+      <span id="st-rede" class="chip">—</span>
+      <span id="st-sync" class="chip">—</span>
+    </div>
+    <div class="topo__usuario">
+      <button id="btn-usuario" type="button" class="chip chip--btn">Entrar</button>
+      <div id="menu-usuario" class="menu" hidden></div>
+    </div>
+  </header>
+
+  <main class="principal">
+    <section id="view-mapa" class="view view--mapa">
+      <div id="mapa" aria-label="Mapa da rede"></div>
+      <div id="mapa-ctrl" class="mapa-ctrl"></div>
+      <div id="painel-filtros" class="flutuante filtros-mapa" hidden></div>
+      <div class="legenda" aria-label="Legenda">
+        <span class="leg"><i class="mk mk--poste mk--sev-A"></i>Defeito A</span>
+        <span class="leg"><i class="mk mk--poste mk--sev-B"></i>B</span>
+        <span class="leg"><i class="mk mk--poste mk--sev-C"></i>C</span>
+        <span class="leg"><i class="mk mk--poste mk--insp-vencida"></i>Insp. vencida</span>
+        <span class="leg"><i class="mk mk--poste mk--insp-pendente"></i>Programada</span>
+        <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado</span>
+        <span class="leg"><i class="mk mk--poste mk--ok"></i>Em dia</span>
+        <span class="leg"><i class="mk mk--trafo mk--neutro"></i>Trafo</span>
+        <span class="leg"><i class="mk mk--chave_fusivel mk--neutro"></i>Chave</span>
+      </div>
+    </section>
+    <section id="view-defeitos" class="view tela" hidden></section>
+    <section id="view-plano" class="view tela" hidden></section>
+    <section id="view-painel" class="view tela" hidden></section>
+    <section id="view-producao" class="view tela" hidden></section>
+  </main>
+
+  <aside id="sheet" class="sheet" hidden aria-labelledby="sheet-titulo">
+    <div class="sheet__cab">
+      <h2 id="sheet-titulo">—</h2>
+      <button id="sheet-fechar" type="button" class="btn btn--txt" aria-label="Fechar painel">✕</button>
+    </div>
+    <div id="sheet-corpo" class="sheet__corpo"></div>
+  </aside>
+
+  <nav id="nav" class="nav" aria-label="Navegação principal"></nav>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="login" class="login" hidden></div>
+  <div class="selo-demo" aria-hidden="true">PROTÓTIPO · DADOS SINTÉTICOS</div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

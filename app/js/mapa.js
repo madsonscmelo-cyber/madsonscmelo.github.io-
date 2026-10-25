@@ -1,0 +1,158 @@
+// Mapa (Leaflet + OSM). Produção: trocar por MapLibre + tiles vetoriais próprios (PMTiles), ver especificação §11.
+/* global L */
+import { el, toast } from './util.js';
+import { estado, equipeDoUsuario } from './store.js';
+import { estadoAtivo, pendenciasDaEquipe, tipoDefeito, STATUS_ABERTOS, TIPOS_ATIVO } from './dominio.js';
+
+const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+let mapa, grupoAtivos, grupoTrechos, marcadorUsuario, circuloUsuario, retangulo;
+let modo = null, cantoA = null, retornos = {};
+
+export const filtros = {
+  camadas: { defeitos: true, inspecoes: true, emDia: true },
+  alimentador: '',
+  equipeTipo: '',
+  minhaEquipe: false,
+};
+
+export function iniciarMapa(container, cb) {
+  retornos = cb;
+  mapa = L.map(container, { zoomControl: false, preferCanvas: false }).setView([-15.836, -48.058], 14);
+  L.control.zoom({ position: 'bottomright' }).addTo(mapa);
+  L.tileLayer(URL_TILES, {
+    maxZoom: 19, crossOrigin: 'anonymous',
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(mapa);
+  grupoTrechos = L.layerGroup().addTo(mapa);
+  grupoAtivos = L.layerGroup().addTo(mapa);
+  mapa.on('click', aoClicar);
+  return mapa;
+}
+
+export const mapaLeaflet = () => mapa;
+
+function aoClicar(ev) {
+  const { lat, lng } = ev.latlng;
+  if (modo === 'simular') {
+    retornos.onSimular?.({ lat, lon: lng });
+  } else if (modo === 'avulso') {
+    definirModo(null);
+    retornos.onPontoAvulso?.({ lat, lon: lng });
+  } else if (modo === 'area') {
+    if (!cantoA) {
+      cantoA = ev.latlng;
+      toast('Agora toque no canto oposto da área.');
+    } else {
+      const b = L.latLngBounds(cantoA, ev.latlng);
+      cantoA = null;
+      definirModo(null);
+      desenharArea(b);
+      retornos.onArea?.(b);
+    }
+  }
+}
+
+export function definirModo(novo) {
+  modo = modo === novo ? null : novo;
+  cantoA = null;
+  container().classList.toggle('mapa--modo', !!modo);
+  retornos.onModo?.(modo);
+  const dicas = { area: 'Seleção de área: toque em dois cantos.', avulso: 'Toque no mapa onde está o ponto da inspeção avulsa.', simular: 'Simulação de posição: toque no mapa para mover a equipe.' };
+  if (modo) toast(dicas[modo]);
+  return modo;
+}
+export const modoAtual = () => modo;
+const container = () => mapa.getContainer();
+
+export function desenharArea(bounds) {
+  limparArea();
+  retangulo = L.rectangle(bounds, { className: 'area-selecao', weight: 2 }).addTo(mapa);
+}
+export function limparArea() {
+  if (retangulo) { retangulo.remove(); retangulo = null; }
+}
+
+function icone(ativo, est, selecionado) {
+  const n = el('div', { class: `mk mk--${ativo.tipo.toLowerCase()} mk--${est.id}${selecionado ? ' mk--sel' : ''}` });
+  const tam = ativo.tipo === 'POSTE' ? 14 : 20;
+  return L.divIcon({ html: n, className: 'mk-wrap', iconSize: [tam, tam] });
+}
+
+export function renderizar(selecionadoId) {
+  if (!mapa) return;
+  const d = estado.dados;
+  grupoTrechos.clearLayers();
+  grupoAtivos.clearLayers();
+  for (const t of d.trechos) {
+    if (filtros.alimentador && t.alimentador !== filtros.alimentador) continue;
+    L.polyline(t.coords, { className: `tronco tronco--${t.alimentador.toLowerCase()}`, weight: 5, interactive: false }).addTo(grupoTrechos);
+  }
+  const eq = equipeDoUsuario();
+  const relevantes = filtros.minhaEquipe && eq ? new Set(pendenciasDaEquipe(d, eq).map((p) => p.ativoId)) : null;
+  for (const a of d.ativos) {
+    if (filtros.alimentador && a.alimentador !== filtros.alimentador) continue;
+    if (relevantes && !relevantes.has(a.id)) continue;
+    const est = estadoAtivo(d, a.id);
+    const cat = est.id.startsWith('sev-') ? 'defeitos' : est.id.startsWith('insp-') ? 'inspecoes' : 'emDia';
+    if (!filtros.camadas[cat]) continue;
+    if (filtros.equipeTipo && !d.defeitos.some((f) => f.ativoId === a.id && STATUS_ABERTOS.includes(f.status)
+      && tipoDefeito(f.tipoId)?.equipes.includes(filtros.equipeTipo))) continue;
+    const m = L.marker([a.lat, a.lon], {
+      icon: icone(a, est, a.id === selecionadoId),
+      title: `${TIPOS_ATIVO[a.tipo]} ${a.codigo} — ${est.nome}`,
+      keyboard: true,
+      zIndexOffset: cat === 'defeitos' ? 1000 : cat === 'inspecoes' ? 500 : 0,
+    });
+    m.on('click', (ev) => { L.DomEvent.stopPropagation(ev); if (!modo) retornos.onAtivo?.(a.id); });
+    m.addTo(grupoAtivos);
+  }
+}
+
+export function focar(lat, lon, zoom = 17) {
+  mapa?.flyTo([lat, lon], Math.max(mapa.getZoom(), zoom), { duration: 0.6 });
+}
+
+export function definirPosicao(p) {
+  if (!mapa || !p) return;
+  const ll = [p.lat, p.lon];
+  if (!marcadorUsuario) {
+    marcadorUsuario = L.marker(ll, { icon: L.divIcon({ html: el('div', { class: 'eu' }), className: 'mk-wrap', iconSize: [22, 22] }), interactive: false, zIndexOffset: 2000 }).addTo(mapa);
+    circuloUsuario = L.circle(ll, { radius: p.precisao || 15, className: 'eu-precisao', interactive: false }).addTo(mapa);
+  } else {
+    marcadorUsuario.setLatLng(ll);
+    circuloUsuario.setLatLng(ll).setRadius(p.precisao || 15);
+  }
+}
+
+export function ativosNaArea(bounds) {
+  return estado.dados.ativos.filter((a) => bounds.contains([a.lat, a.lon]));
+}
+
+/**
+ * Pré-carrega tiles da área visível para uso offline. Limite de 200 tiles respeita a política de uso
+ * do OpenStreetMap; em produção usar servidor de tiles próprio.
+ */
+export async function baixarAreaOffline() {
+  const z0 = mapa.getZoom(), b = mapa.getBounds();
+  const tiles = [];
+  for (let z = z0; z <= Math.min(z0 + 2, 18); z++) {
+    const p1 = mapa.project(b.getNorthWest(), z).divideBy(256).floor();
+    const p2 = mapa.project(b.getSouthEast(), z).divideBy(256).floor();
+    for (let x = p1.x; x <= p2.x; x++) for (let y = p1.y; y <= p2.y; y++) tiles.push(URL_TILES.replace('{z}', z).replace('{x}', x).replace('{y}', y));
+  }
+  if (tiles.length > 200) {
+    toast(`Área grande demais (${tiles.length} tiles). Aproxime o mapa e tente de novo.`, { tipo: 'erro' });
+    return;
+  }
+  if (!('caches' in window)) { toast('Navegador sem suporte a cache offline.', { tipo: 'erro' }); return; }
+  const cache = await caches.open('redeviva-tiles');
+  let ok = 0;
+  for (const u of tiles) {
+    try {
+      if (await cache.match(u)) { ok++; continue; }
+      const r = await fetch(u, { mode: 'cors' });
+      if (r.ok) { await cache.put(u, r); ok++; }
+    } catch { /* sem rede: segue */ }
+  }
+  toast(`Mapa offline: ${ok} de ${tiles.length} tiles disponíveis nesta área.`, { tipo: ok === tiles.length ? 'ok' : 'aviso' });
+}

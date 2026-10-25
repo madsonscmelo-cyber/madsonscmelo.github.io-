@@ -1,0 +1,53 @@
+# Baseline de segurança do app RedeViva (especificação §10.5). Roda em todo push/PR que toca o app.
+name: Segurança — app RedeViva
+
+on:
+  push:
+    paths: ['app/**', '.github/workflows/seguranca-app.yml']
+  pull_request:
+    paths: ['app/**', '.github/workflows/seguranca-app.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  segredos:
+    name: Vazamento de segredos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: SAST (Semgrep — JavaScript, OWASP Top 10, segredos)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: >
+          semgrep scan --error --metrics=off
+          --config p/javascript --config p/owasp-top-ten --config p/secrets
+          --exclude app/vendor app/
+
+  sintaxe-e-csp:
+    name: Sintaxe dos módulos e política de CSP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Checagem de sintaxe dos módulos
+        run: for f in app/js/*.js; do node --check --input-type=module < "$f" || exit 1; done
+      - name: Proíbe innerHTML/eval/style inline no código do app
+        run: |
+          if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function\(|style="' app/js/*.js app/index.html; then
+            echo "Padrão inseguro encontrado (ver acima)."; exit 1
+          fi
+      - name: CSP presente no index.html
+        run: grep -q 'Content-Security-Policy' app/index.html

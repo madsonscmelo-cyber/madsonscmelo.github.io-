@@ -1,0 +1,4 @@
+codigo_ativo;tipo_ativo;latitude;longitude;alimentador;conjunto;criterio;ultima_inspecao;ucs_jusante;compensacao_12m_rs
+TR-07-90;TRAFO;-15,8331;-48,0561;ALM-07;CJ-Centro;TRAFO_REINCIDENTE;2026-06-15;120;42000
+CF-07-90;CHAVE_FUSIVEL;-15,8352;-48,0598;ALM-07;CJ-Centro;CHAVE_FUSIVEL_REINCIDENTE;;350;12000
+P-07-090;POSTE;-15,8360;-48,0610;ALM-07;CJ-Centro;TRONCO_ALIMENTADOR;15/04/2026;2100;0

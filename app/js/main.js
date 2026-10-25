@@ -530,5 +530,5 @@ async function iniciar() {
 iniciar().catch((e) => {
   console.error(e);
   // Checklist 6.5: sem detalhes internos para o usuário (o detalhe fica no console).
-  document.body.append(el('p', { class: 'erro-fatal', text: 'Falha ao iniciar o aplicativo. Recarregue a página ou acione o suporte.' }));
+  document.body.append(el('p', { class: 'erro-fatal', text: 'Falha ao iniciar o aplicativo. Recarregue a página; se continuar, abra no Chrome ou Safari atualizado (não dentro de outro app) ou acione o suporte.' }));
 });

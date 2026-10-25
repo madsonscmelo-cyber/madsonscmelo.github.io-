@@ -11,11 +11,12 @@ import { completarCustosSemValor } from './custos.js';
 import { abrirTrecho, adicionarPonto, trilhaAtiva, iniciarPatrulha, atualizarPainel as atualizarPainelTrilha, simularPatrulha } from './trilha.js';
 import { criarArea, trechoPorId, tiposPlano } from './planos.js';
 import * as mapa from './mapa.js';
-import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho, abrirSheet } from './ui.js';
+import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho, abrirSheet, abrirEscolhaAtivos } from './ui.js';
+import { removerRascunho } from './store.js';
 import { telaDefeitos, telaPlano, telaPainel, telaProducao } from './telas.js';
 import { telaHoje } from './hoje.js';
 import { abrirBusca, listaResultados } from './busca.js';
-import { criarAtivoAvulso } from './acoes.js';
+import { criarAtivoAvulso, descartarAvulso, limparAvulsosOrfaos, alimentadorProximo } from './acoes.js';
 import { logar } from './auditoria.js';
 import { POLITICA, iniciarSessao, retomarSessao, encerrarSessao, registrarAtividade, situacaoSessao, revalidarUsuario } from './auth.js';
 import { telaLogin, telaTrocaSenha, telaBloqueio, telaAcesso } from './acesso.js';
@@ -55,6 +56,8 @@ function aposEntrar() {
   montarNav();
   montarFiltros();
   atualizarTopo();
+  limparAvulsosOrfaos();
+  history.replaceState({ raiz: true }, '');
   mostrar(Object.entries(VIEWS).find(([, v]) => v.perfis.includes(u.perfil))[0]);
   setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 50);
 }
@@ -98,7 +101,7 @@ function montarNav() {
   }
 }
 
-function mostrar(id) {
+function mostrar(id, { historico = true } = {}) {
   if (!VIEWS[id]?.perfis.includes(estado.usuario.perfil)) {
     logar({ categoria: 'SEGURANCA', acao: 'ACESSO_NEGADO_TELA', resultado: 'NEGADO', detalhe: { tela: id } });
     return false;
@@ -107,6 +110,8 @@ function mostrar(id) {
   $$('.view').forEach((v) => { delete v.dataset.aberta; });
   $(`#view-${id}`).dataset.aberta = '1';
   viewAtual = id;
+  // Botão voltar do celular volta para a tela anterior (Jakob), em vez de sair do app.
+  if (historico && history.state?.view !== id) history.pushState({ view: id }, '');
   $$('.view').forEach((v) => { v.hidden = v.id !== `view-${id}`; });
   $$('.nav__btn').forEach((b) => b.classList.toggle('ativo', b.dataset.view === id || (b.dataset.extras || '').split(',').includes(id)));
   if (id !== 'mapa') fecharSheet();
@@ -117,7 +122,7 @@ function mostrar(id) {
     raiz.replaceChildren(el('p', { class: 'carregando', role: 'status', text: 'Carregando…' }));
     requestAnimationFrame(() => setTimeout(() => { raiz.removeAttribute('aria-busy'); if (viewAtual === id) renderizarAtual(); }, 0));
   } else renderizarAtual();
-  if (id === 'mapa') { mapa.liberarFundo(); setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 30); }
+  if (id === 'mapa') { mapa.liberarFundo(); setTimeout(() => { mapa.mapaLeaflet().invalidateSize(); mapa.renderizarPendente(); }, 30); }
   if (id === 'acesso') telaAcesso($('#view-acesso'));
   if (id === 'parametros') telaParametros($('#view-parametros'));
   return true;
@@ -173,6 +178,7 @@ function painelDesenho(pts) {
     el('span', { class: 'pequeno muted', text: pts.length === 1 ? 'Um ponto vira círculo (ex.: escola).' : pts.length === 2 ? 'Toque mais um ponto para formar o polígono.' : pts.length ? 'Polígono pronto: toque Concluir ou continue.' : 'Toque no mapa para marcar os vértices.' }),
     el('div', { class: 'linha' },
       el('button', { type: 'button', class: 'btn', text: 'Concluir', disabled: !(pts.length === 1 || pts.length >= 3), onclick: () => concluirDesenho(pts) }),
+      el('button', { type: 'button', class: 'btn btn--sec', text: '↶ Desfazer ponto', disabled: !pts.length, onclick: () => mapa.desfazerPontoDesenho() }),
       el('button', { type: 'button', class: 'btn btn--txt', text: 'Cancelar', onclick: () => { mapa.definirModo('desenho'); box.hidden = true; } })));
 }
 function concluirDesenho(pts) {
@@ -353,9 +359,31 @@ function renderizarTopoMapa() {
       el('span', { class: 'progresso-dia__trilho' }, preench)));
   }
   for (const r of rascunhosDoUsuario().slice(0, 2)) {
-    topo.append(el('button', { type: 'button', class: 'rascunho', onclick: () => retomarRascunho(r) },
-      el('span', { text: `📝 ${r.titulo} — parou na etapa ${r.etapa + 1} de 3` }), el('strong', { text: 'Continuar' })));
+    topo.append(el('div', { class: 'rascunho-linha' },
+      el('button', { type: 'button', class: 'rascunho', onclick: () => retomarRascunho(r) },
+        el('span', { text: `📝 ${r.titulo} — parou na etapa ${r.etapa + 1} de 3` }), el('strong', { text: 'Continuar' })),
+      el('button', { type: 'button', class: 'rascunho__x', 'aria-label': `Descartar ${r.titulo}`, title: 'Descartar', text: '✕', onclick: () => {
+        if (!confirm(`Descartar "${r.titulo}"? O que foi preenchido será perdido${r.avulsa ? ' e o ponto avulso não será cadastrado' : ''}.`)) return;
+        removerRascunho(r.chave);
+        if (r.avulsa) (r.ativoIds || []).forEach((id) => descartarAvulso(id));
+        logar({ categoria: 'ESCRITA', acao: 'RASCUNHO_DESCARTADO', detalhe: { titulo: r.titulo } });
+        mapa.dadosMudaram(); mapa.renderizar(null); renderizarTopoMapa();
+      } })));
   }
+  // Filtro ligado fica sempre visível, com como desfazer (antes sumia ao fechar o painel).
+  topo.querySelector('.filtros-ativos')?.remove();
+  const ativos = filtrosAtivos();
+  $('#ctrl-filtros')?.classList.toggle('ctrl--ativo', ativos.length > 0);
+  const rot = $('#ctrl-filtros .ctrl__rot');
+  if (rot) rot.textContent = ativos.length ? `Filtros (${ativos.length})` : 'Filtros';
+  if (ativos.length) topo.append(el('div', { class: 'filtros-ativos', role: 'status' },
+    el('span', { class: 'pequeno', text: `Filtro: ${ativos.join(' · ')}` }),
+    el('button', { type: 'button', class: 'btn btn--txt', text: 'Limpar', onclick: () => {
+      Object.assign(mapa.filtros, { alimentador: '', equipeTipo: '' });
+      Object.keys(mapa.filtros.camadas).forEach((k) => { mapa.filtros.camadas[k] = true; });
+      logar({ categoria: 'NAVEGACAO', acao: 'FILTROS_LIMPOS' });
+      montarFiltros(); mapa.renderizar(selecionado); renderizarTopoMapa();
+    } })));
 }
 
 /** Meta do dia = já feito hoje + pendências da equipe com prazo até 7 dias (inclui vencidas) + defeitos programados. */
@@ -394,16 +422,25 @@ function aplicarSol(ligado) {
   try { localStorage.setItem('redeviva-sol', ligado ? '1' : '0'); } catch { /* sem storage: vale só nesta sessão */ }
 }
 
+const NOMES_CAMADA = { defeitos: 'sem defeitos', inspecoes: 'sem inspeções', emDia: 'sem ativos em dia', trechos: 'sem trechos', planos: 'sem áreas de plano' };
+function filtrosAtivos() {
+  const f = mapa.filtros, out = [];
+  if (f.alimentador) out.push(f.alimentador);
+  if (f.equipeTipo) out.push(TIPOS_EQUIPE[f.equipeTipo]);
+  Object.entries(f.camadas).forEach(([k, v]) => { if (!v) out.push(NOMES_CAMADA[k]); });
+  return out;
+}
+
 function montarFiltros() {
   const f = mapa.filtros, d = estado.dados;
   const cb = (rotulo, get, set) => {
     const i = el('input', { type: 'checkbox', checked: get() });
-    i.addEventListener('change', () => { set(i.checked); mapa.renderizar(selecionado); logar({ categoria: 'NAVEGACAO', acao: 'FILTRO_MAPA', detalhe: { filtro: rotulo, valor: i.checked } }); });
+    i.addEventListener('change', () => { set(i.checked); mapa.renderizar(selecionado); renderizarTopoMapa(); logar({ categoria: 'NAVEGACAO', acao: 'FILTRO_MAPA', detalhe: { filtro: rotulo, valor: i.checked } }); });
     return el('label', { class: 'campo--check' }, i, el('span', { text: rotulo }));
   };
   const sel = (rotulo, opcoes, chave) => {
     const s = el('select', { class: 'campo__input' }, opcoes.map(([v, t]) => el('option', { value: v, text: t, selected: f[chave] === v })));
-    s.addEventListener('change', () => { f[chave] = s.value; mapa.renderizar(selecionado); logar({ categoria: 'NAVEGACAO', acao: 'FILTRO_MAPA', detalhe: { filtro: chave, valor: s.value } }); });
+    s.addEventListener('change', () => { f[chave] = s.value; mapa.renderizar(selecionado); renderizarTopoMapa(); logar({ categoria: 'NAVEGACAO', acao: 'FILTRO_MAPA', detalhe: { filtro: chave, valor: s.value } }); });
     return el('label', { class: 'campo' }, el('span', { class: 'campo__rotulo', text: rotulo }), s);
   };
   $('#painel-filtros').replaceChildren(
@@ -413,7 +450,7 @@ function montarFiltros() {
     cb('Ativos em dia / sem criticidade', () => f.camadas.emDia, (v) => { f.camadas.emDia = v; }),
     cb('Trechos pela situação do plano', () => f.camadas.trechos, (v) => { f.camadas.trechos = v; }),
     cb('Áreas de planos especiais', () => f.camadas.planos, (v) => { f.camadas.planos = v; }),
-    estado.usuario.perfil === 'EQUIPE' ? cb('Só pendências da minha equipe', () => f.minhaEquipe, (v) => { f.minhaEquipe = v; }) : null,
+    estado.usuario.perfil === 'EQUIPE' ? cb('Destacar minha equipe (outras em cinza; críticos sempre visíveis)', () => f.minhaEquipe, (v) => { f.minhaEquipe = v; }) : null,
     sel('Alimentador', [['', 'Todos'], ...[...new Set(d.ativos.map((a) => a.alimentador))].sort().map((a) => [a, a])], 'alimentador'),
     sel('Defeito exige equipe', [['', 'Qualquer'], ...Object.entries(TIPOS_EQUIPE)], 'equipeTipo'),
   );
@@ -423,6 +460,47 @@ function aoModo(modo) {
   if (modo) logar({ categoria: 'NAVEGACAO', acao: 'MODO_MAPA', detalhe: { modo } });
   ['simular', 'area', 'avulso'].forEach((m) => $(`#ctrl-${m}`)?.classList.toggle('ctrl--ativo', modo === m));
   $('#ctrl-mais')?.classList.toggle('ctrl--ativo', modo === 'simular' || modo === 'avulso');
+  // Modo ativo ocupa uma entrada do histórico: o voltar do celular cancela o modo.
+  if (modo && !history.state?.modo) history.pushState({ modo: true, view: viewAtual }, '');
+  else if (!modo && history.state?.modo) history.replaceState({ view: viewAtual, dup: true }, '');
+  faixaModo(modo);
+}
+
+/** Faixa fixa no topo do mapa enquanto um modo está ativo: diz o que fazer e tem ✕ Cancelar grande. */
+function faixaModo(modo, extra = {}) {
+  const f = $('#modo-faixa');
+  if (!f) return;
+  f.hidden = !modo || modo === 'desenho';
+  if (f.hidden) { f.replaceChildren(); return; }
+  const cancelar = el('button', { type: 'button', class: 'btn btn--sec modo-faixa__x', text: modo === 'simular' ? '✕ Encerrar' : '✕ Cancelar', onclick: () => { logar({ categoria: 'NAVEGACAO', acao: 'MODO_CANCELADO', detalhe: { modo } }); mapa.definirModo(null); } });
+  const texto = {
+    area: extra.canto ? 'Agora toque no canto oposto da área.' : 'Selecionar área: toque no primeiro canto.',
+    simular: 'Simulação: toque no mapa para mover a equipe.',
+    avulso: 'Ponto avulso: toque no lugar exato do ativo.',
+  }[modo];
+  if (modo === 'avulso' && extra.pino) {
+    const prox = alimentadorProximo(extra.pino.lat, extra.pino.lon);
+    const tipo = el('select', { class: 'campo__input', 'aria-label': 'Tipo do ativo avulso' }, [['POSTE', 'Poste'], ['TRAFO', 'Transformador'], ['CHAVE_FUSIVEL', 'Chave fusível']].map(([v, t]) => el('option', { value: v, text: t })));
+    const alims = [...new Set(estado.dados.ativos.filter((x) => !x.provisorio).map((x) => x.alimentador))].sort();
+    const alim = el('select', { class: 'campo__input', 'aria-label': 'Alimentador' }, [['', 'Alimentador…'], ...alims.map((x) => [x, x])].map(([v, t]) => el('option', { value: v, text: t, selected: v === (prox?.alimentador || '') })));
+    // Evita duplicata: alfinete em cima de ativo já cadastrado oferece abrir o existente.
+    const jaExiste = estado.dados.ativos.filter((x) => !x.provisorio).map((x) => ({ x, dist: distanciaM(extra.pino.lat, extra.pino.lon, x.lat, x.lon) })).filter((y) => y.dist <= 5).sort((p1, p2) => p1.dist - p2.dist)[0]?.x;
+    f.replaceChildren(
+      el('p', { class: 'modo-faixa__txt', text: prox ? `Arraste o alfinete se precisar. Alimentador sugerido pelo ativo a ${prox.dist} m.` : 'Arraste o alfinete se precisar. Nenhum ativo a menos de 300 m: escolha o alimentador.' }),
+      jaExiste ? el('div', { class: 'modo-faixa__dup', role: 'alert' }, el('span', { text: `⚠ ${TIPOS_ATIVO[jaExiste.tipo]} ${jaExiste.codigo} já está cadastrado aqui.` }),
+        el('button', { type: 'button', class: 'btn btn--sec', text: `Abrir ${jaExiste.codigo}`, onclick: () => { logar({ categoria: 'NAVEGACAO', acao: 'AVULSO_DUPLICADO_EVITADO', entidade: 'ativo', entidadeId: jaExiste.id }); mapa.definirModo(null); selecionado = jaExiste.id; mapa.renderizar(jaExiste.id); abrirAtivo(jaExiste.id); } })) : null,
+      el('div', { class: 'linha' }, tipo, alim),
+      el('div', { class: 'linha' }, cancelar, el('button', { type: 'button', class: 'btn', text: '✓ Confirmar aqui', onclick: () => {
+        let a;
+        try { a = criarAtivoAvulso({ ...mapa.posicaoPino(), tipo: tipo.value, alimentador: alim.value }); } catch (e) { toast(e.message, { tipo: 'erro' }); return; }
+        mapa.definirModo(null);
+        selecionado = a.id;
+        mapa.dadosMudaram(); mapa.renderizar(a.id);
+        abrirFormInspecao({ ativos: [a], inspecoes: [], avulsa: true });
+      } })));
+    return;
+  }
+  f.replaceChildren(el('p', { class: 'modo-faixa__txt', role: 'status', text: texto }), cancelar);
 }
 
 /** Sem internet: se não há pacote baixado, sugere o mapa leve para não ficar com o fundo cinza. */
@@ -457,12 +535,9 @@ async function iniciar() {
   mapa.iniciarMapa($('#mapa'), {
     onAtivo: (id) => { logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: id }); selecionado = id; mapa.renderizar(id); abrirAtivo(id); },
     onArea: (b) => { areaAtiva = b; const ativos = mapa.ativosNaArea(b); logar({ categoria: 'LEITURA', acao: 'AREA_SELECIONADA', detalhe: { ativos: ativos.length } }); abrirArea(ativos, limparArea); },
-    onPontoAvulso: (p) => {
-      let a;
-      try { a = criarAtivoAvulso(p); } catch (e) { toast(e.message, { tipo: 'erro' }); return; }
-      selecionado = a.id;
-      abrirFormInspecao({ ativos: [a], inspecoes: [], avulsa: true });
-    },
+    onPino: (p) => faixaModo('avulso', { pino: p }),
+    onCanto: () => faixaModo('area', { canto: true }),
+    onVarios: (ids) => { logar({ categoria: 'LEITURA', acao: 'ATIVOS_SOBREPOSTOS', detalhe: { qtd: ids.length } }); abrirEscolhaAtivos(ids, (id) => { selecionado = id; mapa.renderizar(id); abrirAtivo(id); }); },
     onSimular: (p) => aplicarPosicao({ ...p, precisao: 5, simulada: true }),
     onModo: (m) => { aoModo(m); if (m !== 'desenho') { const b = $('#desenho-painel'); if (b) b.hidden = true; } },
     onTrecho: (id) => abrirTrecho(id),
@@ -487,8 +562,24 @@ async function iniciar() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && estado.usuario && $('#login').hidden) { e.preventDefault(); abrirBusca(contextoTelas()); }
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { fecharMais(); if (mapa.modoAtual()) mapa.definirModo(mapa.modoAtual()); else fecharSheet(); } });
+  let tentouSair = 0;
+  window.addEventListener('popstate', (e) => {
+    if (!estado.usuario || !$('#login').hidden) return;
+    const st = e.state || {};
+    if (mapa.modoAtual() && !st.modo) { mapa.definirModo(null); return; }
+    if (st.dup) { history.back(); return; }
+    if (st.raiz) {
+      // Na primeira tela: avisa antes de sair (2º voltar em até 3 s sai de verdade).
+      if (Date.now() - tentouSair < 3000) { history.back(); return; }
+      tentouSair = Date.now();
+      toast('Toque voltar de novo para sair do app.');
+      history.pushState({ view: viewAtual }, '');
+      return;
+    }
+    if (st.view && st.view !== viewAtual) mostrar(st.view, { historico: false });
+  });
   document.addEventListener('sheet-fechado', () => { if (selecionado) { selecionado = null; mapa.renderizar(null); } });
-  eventos.addEventListener('mudou', () => { aplicarParametros(); if (completarCustosSemValor()) persistir(); renderizarAtual(); atualizarTopo(); });
+  eventos.addEventListener('mudou', () => { mapa.dadosMudaram(); aplicarParametros(); if (completarCustosSemValor()) persistir(); renderizarAtual(); atualizarTopo(); });
   eventos.addEventListener('rascunho', renderizarTopoMapa);
   eventos.addEventListener('sync', (e) => {
     atualizarTopo();

@@ -180,3 +180,22 @@ export function proximoDiaUtil(iso = hojeISO()) {
   while ([0, 6].includes(new Date(`${d}T12:00:00`).getDay())) d = somarDias(d, 1);
   return d;
 }
+
+/**
+ * UTM (hemisfério sul por padrão) → latitude/longitude no SIRGAS 2000 (elipsoide GRS80; na prática igual ao WGS84 do KMZ/GPS).
+ * Necessário porque o GIS corporativo costuma exportar em UTM 23S/24S (EPSG 31983/31984). Erro < 1 m perto do meridiano central.
+ */
+export function utmParaGeo(e, n, zona, sul = true) {
+  const a = 6378137, f = 1 / 298.257222101, k0 = 0.9996;
+  const e2 = f * (2 - f), ep2 = e2 / (1 - e2), e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+  const x = e - 500000, y = sul ? n - 10000000 : n;
+  const mu = y / k0 / (a * (1 - e2 / 4 - (3 * e2 ** 2) / 64 - (5 * e2 ** 3) / 256));
+  const f1 = mu + ((3 * e1) / 2 - (27 * e1 ** 3) / 32) * Math.sin(2 * mu) + ((21 * e1 ** 2) / 16 - (55 * e1 ** 4) / 32) * Math.sin(4 * mu)
+    + ((151 * e1 ** 3) / 96) * Math.sin(6 * mu) + ((1097 * e1 ** 4) / 512) * Math.sin(8 * mu);
+  const s1 = Math.sin(f1), c1 = Math.cos(f1), t1 = Math.tan(f1);
+  const N1 = a / Math.sqrt(1 - e2 * s1 * s1), T1 = t1 * t1, C1 = ep2 * c1 * c1, R1 = (a * (1 - e2)) / (1 - e2 * s1 * s1) ** 1.5, D = x / (N1 * k0);
+  const lat = f1 - ((N1 * t1) / R1) * ((D * D) / 2 - ((5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4) / 24
+    + ((61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6) / 720);
+  const lon = ((zona - 1) * 6 - 177) * (Math.PI / 180) + (D - ((1 + 2 * T1 + C1) * D ** 3) / 6 + ((5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5) / 120) / c1;
+  return { lat: (lat * 180) / Math.PI, lon: (lon * 180) / Math.PI };
+}

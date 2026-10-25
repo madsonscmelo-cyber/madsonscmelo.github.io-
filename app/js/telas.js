@@ -1,5 +1,5 @@
 // Telas de lista e gestão: Defeitos, Plano, Painel e Produção.
-import { el, svgEl, toast, fmtData, fmtDataHora, fmtMoeda, fmtNum, fmtPct, hojeISO, somarDias, semanaISO, csvParse, csvStringify, baixarArquivo, diasEntre } from './util.js';
+import { el, svgEl, toast, fmtData, fmtDataHora, fmtMoeda, fmtNum, fmtPct, hojeISO, somarDias, semanaISO, csvParse, csvStringify, baixarArquivo, diasEntre, utmParaGeo } from './util.js';
 import { estado, registrar, ativoPorId, equipeDoUsuario, nomeEquipe, nomeUsuario } from './store.js';
 import {
   CRITERIOS, criterio, TIPOS_ATIVO, TIPOS_EQUIPE, CONJUNTOS, STATUS_ABERTOS, STATUS_DEFEITO, tipoDefeito,
@@ -120,7 +120,9 @@ export function importarPlano(texto, nomeArquivo) {
   const linhas = csvParse(texto);
   if (!linhas.length) throw new ErroRegra('Arquivo vazio.');
   const cab = linhas[0].map((c) => c.trim().toLowerCase());
-  const faltando = COLUNAS.filter((c) => !['ultima_inspecao', 'ucs_jusante', 'compensacao_12m_rs'].includes(c) && !cab.includes(c));
+  // Coordenada em latitude/longitude OU em UTM SIRGAS 2000 (colunas utm_e, utm_n, zona_utm — ex.: 24S ou 24L).
+  const emUtm = ['utm_e', 'utm_n', 'zona_utm'].every((c) => cab.includes(c));
+  const faltando = COLUNAS.filter((c) => !['ultima_inspecao', 'ucs_jusante', 'compensacao_12m_rs', ...(emUtm ? ['latitude', 'longitude'] : [])].includes(c) && !cab.includes(c));
   if (faltando.length) throw new ErroRegra(`Colunas obrigatórias ausentes: ${faltando.join(', ')}`);
   if (linhas.length > 20001) throw new ErroRegra('Limite de 20.000 linhas por importação.');
   const idx = Object.fromEntries(cab.map((c, i) => [c, i]));
@@ -129,7 +131,13 @@ export function importarPlano(texto, nomeArquivo) {
   linhas.slice(1).forEach((l, n) => {
     const v = (c) => (idx[c] === undefined ? '' : String(l[idx[c]] ?? '').trim());
     const linha = n + 2, codigo = v('codigo_ativo').toUpperCase(), tipo = v('tipo_ativo').toUpperCase(), crit = v('criterio').toUpperCase();
-    const lat = numero(v('latitude')), lon = numero(v('longitude'));
+    let lat = numero(v('latitude')), lon = numero(v('longitude'));
+    if (emUtm && v('utm_e')) {
+      const zm = v('zona_utm').toUpperCase().match(/^(\d{1,2})\s*([A-Z])?$/);
+      if (!zm || +zm[1] < 1 || +zm[1] > 60) return rejeitados.push({ linha: n + 2, codigo: v('codigo_ativo'), motivo: 'Zona UTM inválida (ex.: 24S)' });
+      const sul = !zm[2] || zm[2] === 'S' || (zm[2] >= 'C' && zm[2] <= 'M');
+      ({ lat, lon } = utmParaGeo(numero(v('utm_e')), numero(v('utm_n')), +zm[1], sul));
+    }
     const ultima = data(v('ultima_inspecao'));
     const ucs = v('ucs_jusante') ? numero(v('ucs_jusante')) : 0, comp = v('compensacao_12m_rs') ? numero(v('compensacao_12m_rs')) : 0;
     const erro = (motivo) => rejeitados.push({ linha, codigo, motivo });

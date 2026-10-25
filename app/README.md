@@ -53,6 +53,26 @@ No celular, a instalação como app (PWA) exige HTTPS — por exemplo, publicand
 
 Ficaram para depois do piloto, de propósito: **arrastar-e-soltar** na programação (WCAG 2.2 — 2.5.7 exige alternativa sem arrastar; no celular a agenda por dia já resolve) e **R$ por CHI evitado** (depende de probabilidade de falha calibrada com histórico; hoje seria um número frágil para argumentar orçamento).
 
+## Mapa: desempenho, seleção e cancelamento
+
+| O quê | Como funciona |
+|---|---|
+| **Volume real** | Desenha só o que está na tela; postes sem pendência só de perto (zoom ≥ 16) e num único canvas; com mais de 250 pendências na tela, agrupa por região com a contagem e a cor do pior estado; o estado de cada ativo vem de um índice refeito só quando os dados mudam. 30 mil postes + 1.500 defeitos com CPU 4× mais lenta: **0,1–0,2 s** (antes: 51 s) |
+| **Alvo de toque** | 44 px em volta de cada marcador (o desenho continua 22 px); pontos do canvas aceitam toque a até 14 px |
+| **Ativos no mesmo ponto** | Tocar onde há mais de um (trafo no poste) abre a lista para escolher |
+| **Modos** (área, avulso, simular) | Faixa fixa com o que fazer e **✕ Cancelar**; o voltar do celular também cancela |
+| **Ponto avulso** | Toque só posiciona um alfinete arrastável; escolher tipo e alimentador (sugerido se houver ativo a até 300 m) e **Confirmar**. Sobre ativo já cadastrado, avisa e oferece abrir o existente. Nasce **provisório**: só entra no cadastro e na fila ao concluir a inspeção; descartar o rascunho apaga. Código único `AV-matrícula-carimbo` |
+| **Seleção por área** | Lista com caixas para tirar ativos do lote antes de inspecionar |
+| **Filtros** | Filtro ligado aparece no mapa ("Filtro: ALM-07 · Limpar") e no botão ("Filtros (1)") |
+| **Outras equipes** | Para a equipe, pendências de outras aparecem em cinza; **defeito crítico aparece sempre** (segurança) |
+| **Botão voltar** | Volta para a tela anterior; na primeira tela pede um segundo toque para sair |
+| **Patrulha** | Pausar/retomar sem perder o trajeto, botões grandes e aviso de que quem dirige não opera |
+| **Desenho de área** | Desfazer o último ponto |
+| **Importação UTM** | Plano com `utm_e`, `utm_n`, `zona_utm` (SIRGAS 2000, ex.: 24S) convertido para lat/long (erro de milímetros contra a biblioteca PROJ) |
+| **Configuração da instalação** (`js/config.js`) | Servidor de mapas, atribuição, pacote offline e retângulo aceito nas importações. Produção com o servidor público do OpenStreetMap **e** pacote offline é recusada na inicialização (a política do OSM proíbe download em massa) |
+
+Regras de conflito na sincronização (para o servidor do piloto): [`docs/regras-sincronizacao.md`](../docs/regras-sincronizacao.md).
+
 ## Login e logs
 
 - Entrar com **matrícula + senha**. Senha inicial de demonstração: `Rede@2026` (o app obriga a criar uma senha pessoal no primeiro acesso).
@@ -113,7 +133,7 @@ destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (M
 bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e
 ```
-Resultado atual: 60/60 verificações ponta a ponta, 0 pendências estáticas e 0 violações de acessibilidade (axe-core, 16 telas) — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+Resultado atual: 72/72 verificações ponta a ponta (inclui carga de 30 mil postes com CPU 4× mais lenta), 0 pendências estáticas e 0 violações de acessibilidade (axe-core, 17 telas) — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
 
 ## Roteiro de demonstração (cenário §14 da especificação)
 

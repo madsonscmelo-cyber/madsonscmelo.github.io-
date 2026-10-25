@@ -1,8 +1,8 @@
 // Comandos que alteram o estado. Toda regra de permissão é checada aqui (no produto real: no servidor).
 import { uid, hojeISO, distanciaM, semanaISO, proximoDiaUtil } from './util.js';
 import { custoDefeito } from './custos.js';
-import { estado, registrar, ativoPorId, equipeDoUsuario } from './store.js';
-import { podeTransicionar, gerarInspecoesDevidas, tipoDefeito, equipesAptas } from './dominio.js';
+import { estado, registrar, ativoPorId, equipeDoUsuario, persistir } from './store.js';
+import { podeTransicionar, gerarInspecoesDevidas, tipoDefeito, equipesAptas, PARAM } from './dominio.js';
 import { logar } from './auditoria.js';
 
 const agora = () => new Date().toISOString();
@@ -37,6 +37,8 @@ export function concluirInspecao({ ativoIds, inspecaoIds = [], avulsa, checklist
 
   if (avulsa) {
     for (const ativoId of ativoIds) {
+      const av = ativoPorId(ativoId);
+      if (av?.provisorio) { delete av.provisorio; registrar('ATIVO_AVULSO_CRIADO', 'ativo', av.id, { lat: av.lat, lon: av.lon, tipo: av.tipo, codigo: av.codigo }); }
       const i = { id: uid('insp'), ativoId, criterioId: null, tipo: 'AVULSA', prazo: hojeISO(), equipeId: eq?.id || null, criadaEm: em, ...base };
       d.inspecoes.push(i);
       criadas.push(i);
@@ -103,7 +105,11 @@ export function transicionar(defeito, para, extra = {}) {
   const de = defeito.status;
   defeito.status = para;
   defeito.historico.push({ status: para, em, por: u.id, obs: extra.justificativa || (extra.equipeId ? `Equipe ${extra.equipeId}` : undefined) });
-  registrar(`DEFEITO_${para}`, 'defeito', defeito.id, { de, para, ...(extra.equipeId ? { equipe: extra.equipeId } : {}) });
+  // Versão do defeito: o servidor usa para detectar conflito (ex.: técnico reprogramou enquanto a equipe, offline, executou).
+  // Regra (docs/regras-sincronizacao.md): execução e verificação de campo prevalecem; reprogramação conflitante vira pendência do técnico.
+  const versaoBase = defeito.versao || 0;
+  defeito.versao = versaoBase + 1;
+  registrar(`DEFEITO_${para}`, 'defeito', defeito.id, { de, para, versaoBase, ...(extra.equipeId ? { equipe: extra.equipeId } : {}) });
 }
 
 // ---------- Programação ----------
@@ -130,7 +136,9 @@ export function programarDefeito(defeito, { equipeId, data, motivo }) {
     exigirMotivoSeCongelado(defeito, equipeId, data, motivo);
     defeito.equipeId = equipeId;
     defeito.programacao = { ...defeito.programacao, equipeId, data, semana: semanaISO(data), em: agora(), por: estado.usuario.id };
-    registrar('DEFEITO_REPROGRAMADO', 'defeito', defeito.id, { data, equipe: equipeId, motivo: motivo || null });
+    const versaoBase = defeito.versao || 0;
+    defeito.versao = versaoBase + 1;
+    registrar('DEFEITO_REPROGRAMADO', 'defeito', defeito.id, { data, equipe: equipeId, motivo: motivo || null, versaoBase });
     return;
   }
   transicionar(defeito, 'PROGRAMADO', { equipeId, data, motivo });
@@ -176,19 +184,50 @@ export function distribuirAutomatico() {
   return n;
 }
 
-export function criarAtivoAvulso({ lat, lon }) {
+/** Alimentador sugerido para um ponto: o do ativo mais próximo, só se estiver a até PARAM.raioAtribuicaoM. */
+export function alimentadorProximo(lat, lon) {
+  let m = { a: null, dist: Infinity };
+  for (const a of estado.dados.ativos) { if (a.provisorio) continue; const dist = distanciaM(lat, lon, a.lat, a.lon); if (dist < m.dist) m = { a, dist }; }
+  return m.a && m.dist <= PARAM.raioAtribuicaoM ? { alimentador: m.a.alimentador, conjunto: m.a.conjunto, dist: Math.round(m.dist) } : null;
+}
+
+/**
+ * Ativo avulso nasce PROVISÓRIO: fica no aparelho só enquanto a inspeção estiver em rascunho e só entra no cadastro
+ * (log de escrita + fila de sincronização) quando a inspeção é concluída. Descartar o rascunho apaga o provisório.
+ * Código único por pessoa e instante (AV-matrícula-carimbo) para não colidir entre aparelhos.
+ */
+export function criarAtivoAvulso({ lat, lon, tipo = 'POSTE', alimentador }) {
   exigirPerfil(PERFIS_OPERACAO, 'criar ponto avulso');
-  const d = estado.dados;
-  const proximo = d.ativos.reduce((m, a) => {
-    const dist = distanciaM(lat, lon, a.lat, a.lon);
-    return dist < m.dist ? { a, dist } : m;
-  }, { a: null, dist: Infinity }).a;
+  if (!['POSTE', 'TRAFO', 'CHAVE_FUSIVEL'].includes(tipo)) throw new ErroRegra('Escolha o tipo do ativo.');
+  const prox = alimentadorProximo(lat, lon);
+  const alim = alimentador || prox?.alimentador;
+  if (!alim) throw new ErroRegra('Escolha o alimentador: não há ativo cadastrado perto deste ponto.');
+  const conj = estado.dados.ativos.find((x) => x.alimentador === alim && !x.provisorio)?.conjunto || '—';
+  const d = estado.dados, mat = String(estado.usuario.matricula || 'X').replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 8);
   const a = {
-    id: uid('AV'), codigo: `AV-${String(d.ativos.filter((x) => x.avulso).length + 1).padStart(3, '0')}`, tipo: 'POSTE', avulso: true,
-    alimentador: proximo?.alimentador || '—', conjunto: proximo?.conjunto || '—', lat, lon, ucs: 0, comp12m: 0, falhas12m: 0,
-    criterios: [], ultimaInspecao: {},
+    id: uid('AV'), codigo: `AV-${mat}-${Date.now().toString(36).toUpperCase().slice(-6)}`, tipo, avulso: true, provisorio: true,
+    alimentador: alim, conjunto: conj, lat, lon, ucs: 0, comp12m: 0, falhas12m: 0, criterios: [], ultimaInspecao: {},
   };
   d.ativos.push(a);
-  registrar('ATIVO_AVULSO_CRIADO', 'ativo', a.id, { lat, lon });
+  logar({ categoria: 'ESCRITA', acao: 'ATIVO_AVULSO_PROVISORIO', entidade: 'ativo', entidadeId: a.id, detalhe: { lat, lon, tipo, alimentador: alim } });
+  persistir();
   return a;
+}
+
+/** Descarta o avulso provisório (rascunho abandonado). Ativo já confirmado não se apaga por aqui. */
+export function descartarAvulso(ativoId, motivo = 'rascunho descartado') {
+  const d = estado.dados, i = d.ativos.findIndex((x) => x.id === ativoId && x.provisorio);
+  if (i < 0) return false;
+  d.ativos.splice(i, 1);
+  logar({ categoria: 'ESCRITA', acao: 'ATIVO_AVULSO_DESCARTADO', entidade: 'ativo', entidadeId: ativoId, detalhe: { motivo } });
+  persistir();
+  return true;
+}
+
+/** Ao iniciar: provisórios sem rascunho (aba fechada no meio, aparelho reiniciado) são removidos. */
+export function limparAvulsosOrfaos() {
+  const usados = new Set(Object.values(estado.dados.rascunhos || {}).flatMap((r) => r.ativoIds || []));
+  const orfaos = estado.dados.ativos.filter((a) => a.provisorio && !usados.has(a.id)).map((a) => a.id);
+  orfaos.forEach((id) => descartarAvulso(id, 'sem rascunho ao iniciar'));
+  return orfaos.length;
 }

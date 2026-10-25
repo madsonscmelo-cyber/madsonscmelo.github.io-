@@ -6,6 +6,7 @@ import { STATUS_ABERTOS, pendenciasDaEquipe } from './dominio.js';
 import { abrirSheet } from './ui.js';
 import * as mapa from './mapa.js';
 import { logar } from './auditoria.js';
+import { CONFIG } from './config.js';
 
 export const CACHE_PACOTES = 'redeviva-pacotes';
 const ZOOMS = [14, 15, 16, 17];
@@ -80,6 +81,7 @@ export async function estimar(alim) {
 
 // ---------- Download ----------
 export async function baixarPacote(alim, { comMapa = true, aoProgresso = () => {} } = {}) {
+  if (!CONFIG.mapa.pacoteOffline) comMapa = false; // instalação sem servidor de mapas próprio: só dados + mapa leve
   if (!online()) throw new Error('Sem internet. Baixe o pacote na base, com Wi-Fi.');
   const est = await estimar(alim);
   let ok = 0;
@@ -142,7 +144,7 @@ export async function abrirTrabalhoOffline() {
   const sugerido = eq ? alims.reduce((m, a) => (contar(a) > contar(m) ? a : m), alims[0]) : alims[0];
 
   const sel = el('select', { class: 'campo__input', 'aria-label': 'Alimentador' }, alims.map((a) => el('option', { value: a, selected: a === sugerido, text: `${a}${eq ? ` · ${contar(a)} pendência(s) suas` : ''}` })));
-  const comMapa = el('input', { type: 'checkbox', checked: true });
+  const comMapa = el('input', { type: 'checkbox', checked: CONFIG.mapa.pacoteOffline, disabled: !CONFIG.mapa.pacoteOffline });
   const resumo = el('div', { class: 'meta-grupo' });
   const barra = el('div', { class: 'passos__barra', hidden: true }, el('span', { class: 'passos__preench' }));
   const botao = el('button', { type: 'button', class: 'btn btn--grande', text: 'Baixar pacote' });

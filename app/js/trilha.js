@@ -33,10 +33,19 @@ export function iniciarTrilha(modo, trechoId = null) {
 /** Recebe cada posição (GPS real ou simulada) enquanto o trajeto está gravando. */
 export function adicionarPonto({ lat, lon }) {
   const t = estado.trilha;
-  if (!t) return;
+  if (!t || t.pausada) return;
   const ult = t.pontos.at(-1);
   if (ult && distanciaM(ult[0], ult[1], lat, lon) < 3) return; // ignora ruído parado
   t.pontos.push([lat, lon]);
+  atualizarPainel();
+}
+
+/** Pausa/retoma a gravação (almoço, parada no veículo, área sem acesso) sem perder o trajeto. */
+export function pausarTrilha() {
+  const t = estado.trilha;
+  if (!t) return;
+  t.pausada = !t.pausada;
+  logar({ categoria: 'ESCRITA', acao: t.pausada ? 'TRAJETO_PAUSADO' : 'TRAJETO_RETOMADO', detalhe: { modo: t.modo, pontos: t.pontos.length } });
   atualizarPainel();
 }
 
@@ -78,13 +87,17 @@ export function atualizarPainel() {
   const kmPerc = t.pontos.reduce((s, p, i) => (i ? s + distanciaM(t.pontos[i - 1][0], t.pontos[i - 1][1], p[0], p[1]) : 0), 0) / 1000;
   const barra = el('span', { class: 'progresso-dia__preench' });
   barra.style.width = `${Math.round((cob ?? 0) * 100)}%`;
+  const patrulha = t.modo === 'PATRULHA';
+  box.classList.toggle('trilha-painel--patrulha', patrulha);
   box.replaceChildren(
-    el('div', { class: 'trilha__tit' }, el('span', { class: 'rec', 'aria-hidden': 'true' }),
-      el('strong', { text: t.modo === 'PATRULHA' ? 'Patrulha em andamento' : `Inspeção do trecho ${t.trechoId}` })),
+    el('div', { class: 'trilha__tit' }, el('span', { class: `rec${t.pausada ? ' rec--pausa' : ''}`, 'aria-hidden': 'true' }),
+      el('strong', { text: `${patrulha ? 'Patrulha' : `Inspeção do trecho ${t.trechoId}`}${t.pausada ? ' — PAUSADA' : ' em andamento'}` })),
+    patrulha ? el('p', { class: 'pequeno aviso-direcao', text: '⚠ Quem dirige não opera o app. A gravação é automática; o passageiro pausa ou encerra.' }) : null,
     el('div', { class: 'pequeno', text: `${kmPerc.toFixed(2)} km percorridos · ${t.pontos.length} pontos${cob !== null ? ` · cobertura ${fmtPct(cob)} (mín. ${PARAM.coberturaMinPct}%)` : ''}` }),
     cob !== null ? el('span', { class: 'progresso-dia__trilho' }, barra) : null,
-    el('div', { class: 'linha' },
-      el('button', { type: 'button', class: 'btn', text: t.modo === 'PATRULHA' ? 'Encerrar patrulha' : 'Concluir', onclick: () => (t.modo === 'PATRULHA' ? encerrarPatrulha() : abrirConclusao({ trechoId: t.trechoId, tipo: 'TERRESTRE', pontos: t.pontos, inicio: t.inicio })) }),
+    el('div', { class: `linha${patrulha ? ' trilha__grandes' : ''}` },
+      el('button', { type: 'button', class: `btn btn--sec${patrulha ? ' btn--grande' : ''}`, text: t.pausada ? '▶ Retomar' : '⏸ Pausar', 'aria-pressed': String(!!t.pausada), onclick: pausarTrilha }),
+      el('button', { type: 'button', class: `btn${patrulha ? ' btn--grande' : ''}`, text: t.modo === 'PATRULHA' ? 'Encerrar patrulha' : 'Concluir', onclick: () => (t.modo === 'PATRULHA' ? encerrarPatrulha() : abrirConclusao({ trechoId: t.trechoId, tipo: 'TERRESTRE', pontos: t.pontos, inicio: t.inicio })) }),
       t.trechoId ? el('button', { type: 'button', class: 'btn btn--sec', text: 'Simular caminhada (demo)', onclick: () => simularPercurso(t.trechoId) }) : null,
       el('button', { type: 'button', class: 'btn btn--txt', text: 'Cancelar', onclick: () => { if (confirm('Descartar o trajeto gravado?')) cancelarTrilha(); } })));
 }

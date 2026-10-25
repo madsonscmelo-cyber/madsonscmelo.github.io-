@@ -210,7 +210,7 @@ export function abrirAtivo(id) {
 
   const corpo = el('div', { class: 'ficha' });
   corpo.append(
-    el('div', { class: 'ficha__estado' }, chip(est.nome, `chip--${est.id}`), a.avulso ? chip('Fora do plano') : null,
+    el('div', { class: 'ficha__estado' }, chip(est.nome, `chip--${est.id}`), a.avulso ? chip('Fora do plano') : null, a.provisorio ? chip('Provisório: só entra no cadastro ao concluir a inspeção', 'chip--aviso') : null,
       rascunho ? chip('📝 Inspeção em andamento', 'chip--rascunho') : null),
     // Miller: dois grupos de 3 informações.
     grupoMeta('Rede',
@@ -480,17 +480,50 @@ export function abrirArea(ativos, aoLimpar) {
   if (eq) pend = pend.filter((i) => i.equipeId === eq.id || (!i.equipeId && eq.tipo === 'INSPECAO'));
   const abertos = d.defeitos.filter((f) => ids.has(f.ativoId) && STATUS_ABERTOS.includes(f.status));
   const comPend = ativos.filter((a) => pend.some((i) => i.ativoId === a.id));
+  // Revisar antes de agir: cada ativo vem marcado e pode ser tirado do lote.
+  const marcados = new Set(comPend.map((a) => a.id));
+  const botaoLote = el('button', { type: 'button', class: 'btn btn--grande' });
+  const atualizar = () => {
+    const n = pend.filter((i) => marcados.has(i.ativoId)).length;
+    botaoLote.textContent = `Inspecionar em lote (${n})`;
+    botaoLote.disabled = !n;
+  };
+  botaoLote.addEventListener('click', () => {
+    const escolhidos = comPend.filter((a) => marcados.has(a.id));
+    logar({ categoria: 'LEITURA', acao: 'LOTE_REVISADO', detalhe: { selecionados: escolhidos.length, retirados: comPend.length - escolhidos.length } });
+    abrirFormInspecao({ ativos: escolhidos, inspecoes: pend.filter((i) => marcados.has(i.ativoId)) });
+  });
   const corpo = el('div', { class: 'ficha' },
     grupoMeta('Na área',
       linhaMeta('Ativos', String(ativos.length)),
       linhaMeta('Inspeções pendentes', String(pend.length)),
       linhaMeta('Defeitos abertos', String(abertos.length))),
-    el('ul', { class: 'lista' }, comPend.map((a) => el('li', { class: 'lista__item pequeno' },
-      el('button', { type: 'button', class: 'btn btn--txt', text: `${TIPOS_ATIVO[a.tipo]} ${a.codigo}`, onclick: () => { logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: a.id }); abrirAtivo(a.id); } }),
-      el('span', { class: 'muted', text: pend.filter((i) => i.ativoId === a.id).map((i) => criterio(i.criterioId)?.nome).join(', ') })))),
+    comPend.length ? el('p', { class: 'pequeno muted', text: 'Desmarque o que não vai inspecionar agora.' }) : null,
+    el('ul', { class: 'lista' }, comPend.map((a) => {
+      const cb = el('input', { type: 'checkbox', checked: true, 'aria-label': `Incluir ${a.codigo} no lote` });
+      cb.addEventListener('change', () => { if (cb.checked) marcados.add(a.id); else marcados.delete(a.id); atualizar(); });
+      return el('li', { class: 'lista__item lista__item--check' },
+        el('label', { class: 'campo--check' }, cb, el('span', { text: `${TIPOS_ATIVO[a.tipo]} ${a.codigo}` })),
+        el('span', { class: 'muted pequeno', text: pend.filter((i) => i.ativoId === a.id).map((i) => criterio(i.criterioId)?.nome).join(', ') }),
+        el('button', { type: 'button', class: 'btn btn--txt', text: 'Ver', 'aria-label': `Ver ficha de ${a.codigo}`, onclick: () => { logar({ categoria: 'LEITURA', acao: 'ATIVO_CONSULTADO', entidade: 'ativo', entidadeId: a.id }); abrirAtivo(a.id); } }));
+    })),
     el('button', { type: 'button', class: 'btn btn--txt', text: 'Limpar seleção', onclick: () => { aoLimpar(); fecharSheet(); } }),
   );
   if (!comPend.length) corpo.append(el('p', { class: 'muted', text: 'Nenhuma inspeção pendente para você nesta área.' }));
-  const rodape = comPend.length ? el('button', { type: 'button', class: 'btn btn--grande', text: `Inspecionar em lote (${pend.length})`, onclick: () => abrirFormInspecao({ ativos: comPend, inspecoes: pend }) }) : null;
-  abrirSheet('Área selecionada', corpo, { tipo: 'area' }, rodape);
+  atualizar();
+  abrirSheet('Área selecionada', corpo, { tipo: 'area' }, comPend.length ? botaoLote : null);
+}
+
+/** Vários ativos no mesmo ponto da tela (ex.: trafo no poste): a pessoa escolhe em vez de o app adivinhar. */
+export function abrirEscolhaAtivos(ids, aoEscolher) {
+  const d = estado.dados;
+  const corpo = el('div', { class: 'ficha' },
+    el('p', { class: 'muted', text: 'Há mais de um ativo neste ponto. Qual você quer abrir?' }),
+    el('ul', { class: 'lista' }, ids.map(ativoPorId).filter(Boolean).map((a) => {
+      const est = estadoAtivo(d, a.id);
+      return el('li', {}, el('button', { type: 'button', class: 'btn btn--sec btn--largo escolha-ativo', onclick: () => aoEscolher(a.id) },
+        el('i', { class: `mk mk--${a.tipo.toLowerCase()} mk--${est.id}`, 'aria-hidden': 'true' }),
+        el('strong', { text: `${TIPOS_ATIVO[a.tipo]} ${a.codigo}` }), el('span', { class: 'muted pequeno', text: est.nome })));
+    })));
+  abrirSheet(`${ids.length} ativos neste ponto`, corpo, { tipo: 'form' });
 }

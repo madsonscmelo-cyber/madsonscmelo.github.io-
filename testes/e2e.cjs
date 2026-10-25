@@ -644,6 +644,166 @@ function registrar(id, nome, passou, evidencia) {
     await g.click('#btn-sol');
     await cg.close();
 
+
+    // ================= Mapa: desempenho, avulso, voltar, modos, filtros, outra equipe, sobrepostos, lote, UTM, patrulha =================
+    const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+    const mp = await cm.newPage();
+    vigiar(mp);
+    mp.on('dialog', (dl) => dl.accept());
+    await mp.goto(BASE);
+    await entrar(mp, 'Gestão de Planejamento');
+    const cdpM = await cm.newCDPSession(mp);
+    await cdpM.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    const carga = await mp.evaluate(async () => {
+      const { estado } = await import('./js/store.js'); const m = await import('./js/mapa.js');
+      const orig = { at: estado.dados.ativos, df: estado.dados.defeitos }; const base = orig.at.find((x) => x.tipo === 'POSTE'); const c = m.mapaLeaflet().getCenter();
+      const novos = Array.from({ length: 30000 }, (_, i) => ({ ...base, id: `X${i}`, codigo: `X${i}`, criterios: [], lat: c.lat + ((i * 7919) % 1000 / 1000 - 0.5) * 0.06, lon: c.lng + ((i * 104729) % 1000 / 1000 - 0.5) * 0.06 }));
+      const defs = novos.filter((_, i) => i % 20 === 0).map((a, i) => ({ id: `D${i}`, ativoId: a.id, tipoId: 'NINHO', severidade: ['A', 'B', 'C'][i % 3], status: 'VALIDADO', criadoEm: new Date().toISOString(), historico: [] }));
+      estado.dados.ativos = orig.at.concat(novos); estado.dados.defeitos = orig.df.concat(defs);
+      const espera = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+      const med = async (fn) => { const t0 = performance.now(); fn(); await espera(); return Math.round(performance.now() - t0); };
+      const abrir = await med(() => { m.dadosMudaram(); m.renderizar(null); });
+      const elementos = document.querySelectorAll('.leaflet-marker-pane .leaflet-marker-icon').length;
+      const acao = await med(() => { m.dadosMudaram(); m.renderizar(null); });
+      const zoom = await med(() => { m.mapaLeaflet().setZoom(12, { animate: false }); m.renderizar(null); });
+      m.mapaLeaflet().setZoom(14, { animate: false });
+      estado.dados.ativos = orig.at; estado.dados.defeitos = orig.df; m.dadosMudaram(); m.renderizar(null);
+      return { abrir, acao, zoom, elementos };
+    });
+    await cdpM.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    registrar('MAPA-CARGA', 'Mapa com 30 mil postes e 1.500 defeitos (CPU 4× mais lenta) abre e redesenha em menos de 1 s', carga.abrir < 1000 && carga.acao < 1000 && carga.zoom < 1000 && carga.elementos < 400,
+      `abrir ${carga.abrir} ms · após uma ação ${carga.acao} ms · zoom cidade ${carga.zoom} ms · ${carga.elementos} elementos na página (antes: 51 s e 30 mil elementos)`);
+
+    // Modo com faixa e Cancelar; voltar do celular cancela o modo sem sair do app
+    await mp.tap('#ctrl-area'); await mp.waitForTimeout(200);
+    const faixaTxt = await mp.locator('#modo-faixa').innerText();
+    await mp.tap('#modo-faixa button:has-text("Cancelar")'); await mp.waitForTimeout(200);
+    const modoDepoisX = await mp.evaluate(async () => (await import('./js/mapa.js')).modoAtual());
+    await mp.tap('#ctrl-area'); await mp.waitForTimeout(200);
+    await mp.goBack(); await mp.waitForTimeout(400);
+    const modoDepoisVoltar = await mp.evaluate(async () => (await import('./js/mapa.js')).modoAtual());
+    registrar('MAPA-2', 'Modo do mapa mostra faixa com ✕ Cancelar; o voltar do celular cancela o modo e não sai do app',
+      /primeiro canto/.test(faixaTxt) && modoDepoisX === null && modoDepoisVoltar === null && mp.url().includes('/app/') && await mp.locator('#modo-faixa').isHidden(),
+      `faixa: "${faixaTxt.split('\n')[0]}" · ✕ → ${modoDepoisX} · voltar → ${modoDepoisVoltar} · ${mp.url().includes('/app/') ? 'continua no app' : 'saiu'}`);
+
+    // Voltar entre telas
+    await irPara(mp, 'painel'); await irPara(mp, 'mapa');
+    await mp.goBack(); await mp.waitForTimeout(500);
+    const telaApos = await mp.evaluate(() => [...document.querySelectorAll('.view')].find((v) => !v.hidden)?.id);
+    registrar('MAPA-3', 'Voltar do celular volta para a tela anterior (Painel ← Mapa) em vez de sair', telaApos === 'view-painel' && mp.url().includes('/app/'), `depois do voltar: ${telaApos}`);
+    await irPara(mp, 'mapa');
+
+    // Filtro ativo visível e "Limpar"
+    await mp.tap('#ctrl-filtros'); await mp.waitForTimeout(150);
+    await mp.selectOption('#painel-filtros select >> nth=0', 'ALM-07');
+    await mp.tap('#ctrl-filtros'); await mp.waitForTimeout(200);
+    const chipF = await mp.locator('.filtros-ativos').innerText().catch(() => '');
+    await mp.tap('.filtros-ativos button:has-text("Limpar")'); await mp.waitForTimeout(200);
+    const alimDepois = await mp.evaluate(async () => (await import('./js/mapa.js')).filtros.alimentador);
+    registrar('MAPA-4', 'Filtro ligado fica visível no mapa e "Limpar" desfaz', /ALM-07/.test(chipF) && alimDepois === '' && await mp.locator('.filtros-ativos').count() === 0, `"${chipF.replace(/\n/g, ' ')}" → limpar → alimentador "${alimDepois}"`);
+
+    // Ativos sobrepostos
+    const sob = await mp.evaluate(async () => {
+      const { estado } = await import('./js/store.js'); const m = await import('./js/mapa.js');
+      const tr = estado.dados.ativos.find((a) => a.tipo === 'TRAFO');
+      const gemeo = { ...tr, id: 'P-GEMEO', codigo: 'P-GEMEO', tipo: 'POSTE', criterios: ['TRONCO'] };
+      estado.dados.ativos.push(gemeo);
+      m.mapaLeaflet().setView([tr.lat, tr.lon], 18, { animate: false }); m.dadosMudaram(); m.renderizar(null);
+      await new Promise((r) => setTimeout(r, 200));
+      const pt = m.mapaLeaflet().latLngToContainerPoint([tr.lat, tr.lon]); const box = document.querySelector('#mapa').getBoundingClientRect();
+      return { x: box.left + pt.x, y: box.top + pt.y, codigo: tr.codigo };
+    });
+    await mp.touchscreen.tap(sob.x, sob.y); await mp.waitForTimeout(500);
+    const escolha = await mp.locator('#sheet .escolha-ativo').allInnerTexts();
+    registrar('MAPA-5', 'Toque onde há mais de um ativo (trafo no poste) pergunta qual abrir', escolha.length === 2 && escolha.some((t) => t.includes(sob.codigo)) && escolha.some((t) => t.includes('P-GEMEO')), escolha.map((t) => t.split('\n')[0]).join(' | '));
+    await mp.locator('#sheet .escolha-ativo', { hasText: sob.codigo }).tap(); await mp.waitForTimeout(400);
+    const abriuEscolhido = await mp.locator('#sheet-titulo').innerText();
+    await mp.tap('#sheet-fechar').catch(() => {});
+    await mp.evaluate(async () => { const { estado } = await import('./js/store.js'); estado.dados.ativos = estado.dados.ativos.filter((a) => a.id !== 'P-GEMEO'); (await import('./js/mapa.js')).dadosMudaram(); });
+    registrar('MAPA-5b', 'Escolhido na lista, abre a ficha do ativo certo', abriuEscolhido.includes(sob.codigo), abriuEscolhido);
+
+    // Lote revisável
+    await entrar(mp, 'Equipe Inspeção 01');
+    const alvoLote = await mp.evaluate(async () => {
+      const { estado } = await import('./js/store.js'); const m = await import('./js/mapa.js'); const ui = await import('./js/ui.js');
+      const pend = estado.dados.inspecoes.filter((i) => i.status !== 'CONCLUIDA' && i.equipeId === 'INS-01');
+      const ids = [...new Set(pend.map((i) => i.ativoId))].slice(0, 3); const ativos = ids.map((id) => estado.dados.ativos.find((a) => a.id === id));
+      ui.abrirArea(ativos, () => {}); return ids.length;
+    });
+    const antesLote = await mp.locator('#sheet-rodape button').innerText();
+    await mp.locator('#sheet .lista__item--check input[type=checkbox]').first().uncheck(); await mp.waitForTimeout(150);
+    const depoisLote = await mp.locator('#sheet-rodape button').innerText();
+    registrar('MAPA-6', 'Seleção de área: dá para tirar um ativo do lote antes de inspecionar', alvoLote >= 2 && antesLote !== depoisLote && /\(\d+\)/.test(depoisLote), `${antesLote} → ${depoisLote}`);
+    await mp.tap('#sheet-fechar').catch(() => {});
+
+    // Outra equipe em cinza, crítico sempre visível
+    const outros = await mp.evaluate(async () => {
+      const m = await import('./js/mapa.js'); m.mapaLeaflet().setZoom(15, { animate: false }); m.filtros.visao = 'tudo'; m.renderizar(null);
+      await new Promise((r) => setTimeout(r, 200));
+      return { cinza: document.querySelectorAll('.leaflet-marker-pane .mk--outro').length, criticos: document.querySelectorAll('.leaflet-marker-pane .mk--sev-A:not(.mk--outro)').length, proprios: document.querySelectorAll('.leaflet-marker-pane .mk:not(.mk--outro)').length };
+    });
+    registrar('MAPA-7', 'Equipe vê pendências de outras equipes em cinza e defeito crítico sempre em destaque', outros.cinza > 0 && outros.criticos > 0, `${outros.proprios} próprios/críticos em cor · ${outros.cinza} de outras equipes em cinza · ${outros.criticos} críticos`);
+
+    // Ponto avulso: toque não cria; alfinete + confirmar cria provisório; descartar remove
+    const nAt = async () => mp.evaluate(async () => { const { estado } = await import('./js/store.js'); return { at: estado.dados.ativos.length, fila: estado.dados.fila.filter((f) => f.acao === 'ATIVO_AVULSO_CRIADO').length }; });
+    const a0 = await nAt();
+    await mp.tap('#ctrl-mais'); await mp.tap('#ctrl-avulso'); await mp.waitForTimeout(200);
+    const mb = await mp.locator('#mapa').boundingBox();
+    await mp.touchscreen.tap(mb.x + mb.width / 2, mb.y + mb.height / 2); await mp.waitForTimeout(300);
+    const a1 = await nAt();
+    const temPino = await mp.locator('.pino').count();
+    await mp.selectOption('#modo-faixa select[aria-label="Tipo do ativo avulso"]', 'TRAFO');
+    const alimSug = await mp.locator('#modo-faixa select[aria-label="Alimentador"]').inputValue();
+    if (!alimSug) await mp.selectOption('#modo-faixa select[aria-label="Alimentador"]', { index: 1 });
+    await mp.tap('#modo-faixa button:has-text("Confirmar aqui")'); await mp.waitForTimeout(500);
+    const a2 = await nAt();
+    const prov = await mp.evaluate(async () => { const { estado } = await import('./js/store.js'); const a = estado.dados.ativos.find((x) => x.provisorio); return a ? `${a.codigo} ${a.tipo}` : null; });
+    await mp.tap('#sheet-fechar').catch(() => {}); await mp.waitForTimeout(300);
+    await mp.locator('.rascunho__x').first().tap(); await mp.waitForTimeout(400);
+    const a3 = await nAt();
+    registrar('MAPA-8', 'Avulso: toque só posiciona o alfinete; confirmar cria provisório (fora da fila); descartar o rascunho apaga',
+      a1.at === a0.at && temPino === 1 && a2.at === a0.at + 1 && a2.fila === a0.fila && /^AV-INS01-\w+ TRAFO$/.test(prov || '') && a3.at === a0.at,
+      `toque: ${a0.at}→${a1.at} ativos · confirmar: ${prov} (fila: ${a2.fila}) · descartar: ${a3.at} ativos`);
+
+    // Avulso em cima de ativo existente: oferece abrir o existente (evita duplicata)
+    const ex = await mp.evaluate(async () => {
+      const { estado } = await import('./js/store.js'); const m = await import('./js/mapa.js');
+      const pend = estado.dados.inspecoes.find((i) => i.status !== 'CONCLUIDA' && i.equipeId === 'INS-01'); const a = estado.dados.ativos.find((x) => x.id === pend.ativoId);
+      m.mapaLeaflet().setView([a.lat, a.lon], 18, { animate: false }); m.renderizar(null); await new Promise((r) => setTimeout(r, 200));
+      const pt = m.mapaLeaflet().latLngToContainerPoint([a.lat, a.lon]); const box = document.querySelector('#mapa').getBoundingClientRect();
+      return { x: box.left + pt.x, y: box.top + pt.y, codigo: a.codigo };
+    });
+    await mp.tap('#ctrl-mais'); await mp.tap('#ctrl-avulso'); await mp.waitForTimeout(200);
+    await mp.touchscreen.tap(ex.x, ex.y); await mp.waitForTimeout(300);
+    const dup = await mp.locator('.modo-faixa__dup').innerText().catch(() => '');
+    await mp.tap('.modo-faixa__dup button'); await mp.waitForTimeout(400);
+    const fichaDup = await mp.locator('#sheet-titulo').innerText().catch(() => '');
+    await mp.tap('#sheet-fechar').catch(() => {});
+    registrar('MAPA-10', 'Avulso sobre ativo já cadastrado avisa e abre o existente (sem duplicata)', dup.includes(ex.codigo) && fichaDup.includes(ex.codigo), `"${dup.split('\n')[0]}" → ficha ${fichaDup}`);
+
+    // Patrulha: pausar não grava pontos
+    const pat = await mp.evaluate(async () => {
+      const T = await import('./js/trilha.js'); const { estado } = await import('./js/store.js');
+      T.iniciarPatrulha?.(); if (!estado.trilha) T.iniciarTrilha('PATRULHA');
+      T.adicionarPonto({ lat: -15.83, lon: -48.05 }); T.adicionarPonto({ lat: -15.831, lon: -48.05 });
+      const antes = estado.trilha.pontos.length; T.pausarTrilha(); T.adicionarPonto({ lat: -15.84, lon: -48.05 });
+      const pausado = estado.trilha.pontos.length; T.pausarTrilha(); T.adicionarPonto({ lat: -15.85, lon: -48.05 }); const retomado = estado.trilha.pontos.length;
+      const grandes = document.querySelectorAll('#trilha-painel .btn--grande').length; const aviso = document.querySelector('.aviso-direcao')?.textContent || '';
+      T.cancelarTrilha(); return { antes, pausado, retomado, grandes, aviso };
+    });
+    registrar('MAPA-9', 'Patrulha: pausar não grava trajeto, botões grandes e aviso de que quem dirige não opera', pat.pausado === pat.antes && pat.retomado === pat.antes + 1 && pat.grandes >= 2 && /dirige/.test(pat.aviso), `pontos ${pat.antes} → pausado ${pat.pausado} → retomado ${pat.retomado} · ${pat.grandes} botões grandes`);
+
+    // Importação com UTM SIRGAS 2000 (23S)
+    await entrar(mp, 'Gestão de Planejamento');
+    const utm = await mp.evaluate(async () => {
+      const T = await import('./js/telas.js'); const { estado } = await import('./js/store.js'); const { distanciaM } = await import('./js/util.js');
+      const csv = 'codigo_ativo;tipo_ativo;utm_e;utm_n;zona_utm;alimentador;conjunto;criterio\nTR-UTM-01;TRAFO;189303,92;8251045,08;23S;ALM-07;CJ-Centro;TRAFO_REINCIDENTE\nTR-UTM-02;TRAFO;189303;8251045;99X;ALM-07;CJ-Centro;TRAFO_REINCIDENTE';
+      const r = T.importarPlano(csv, 'utm.csv'); const a = estado.dados.ativos.find((x) => x.codigo === 'TR-UTM-01');
+      return { aceitos: r.aceitos, motivo: r.rejeitados[0]?.motivo, erroM: a ? distanciaM(a.lat, a.lon, -15.80, -47.90) : null };
+    });
+    registrar('UTM-1', 'Plano em UTM SIRGAS 2000 é convertido (erro < 1 m contra referência PROJ) e zona inválida é recusada', utm.aceitos === 1 && utm.erroM !== null && utm.erroM < 1 && /Zona UTM/.test(utm.motivo || ''), `aceitos ${utm.aceitos} · erro ${utm.erroM?.toFixed(3)} m · recusa: ${utm.motivo}`);
+    await cm.close();
+
     // ================= Fase 8 — 360 px e alvos de toque ≥ 48 px =================
     const ctx3 = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, serviceWorkers: 'block' });
     const m = await ctx3.newPage();

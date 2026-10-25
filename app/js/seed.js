@@ -1,4 +1,5 @@
 // Dados 100% sintéticos para o protótipo. Nenhum ativo, código ou valor corresponde à rede real.
+import { CONFIG } from './config.js';
 import { mulberry32, deslocar, distanciaM, hojeISO, somarDias, uid, semanaISO, proximoDiaUtil } from './util.js';
 import { CRITERIOS, tiposDefeitoPara, gerarInspecoesDevidas } from './dominio.js';
 import { dividirLinha, comprimentoKm } from './rede.js';
@@ -12,7 +13,8 @@ const ROTAS = {
   'ALM-11': { conjunto: 'CJ-Sul', pts: [SE, [-15.8500, -48.0722], [-15.8580, -48.0642], [-15.8650, -48.0601], [-15.8722, -48.0520]] },
 };
 // Área de concessão fictícia usada na validação da importação.
-export const AREA_CONCESSAO = { latMin: -16.06, latMax: -15.50, lonMin: -48.29, lonMax: -47.31 };
+// Área válida para importações vem da configuração da instalação (a da demonstração é sintética).
+export const AREA_CONCESSAO = CONFIG.areaConcessao;
 
 function amostrar(pts, passoM) {
   const out = [pts[0]];

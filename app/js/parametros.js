@@ -56,7 +56,7 @@ function padrao() {
   for (const m of [mesISO(0), mesISO(1), mesISO(2)]) for (const [categoria, valor] of Object.entries(base)) orcamento.push({ mes: m, categoria, valor });
   return {
     geral: { raioValidacaoM: PARAM.raioValidacaoM, raioAlertaM: PARAM.raioAlertaM, janelaProgramacaoDias: PARAM.janelaProgramacaoDias, horasDiaEquipe: PARAM.horasDiaEquipe, diasUteisSemana: PARAM.diasUteisSemana,
-      coberturaMinPct: 95, faixaTrilhaM: 30, raioEscolaM: 200, raioAtribuicaoM: 300 },
+      coberturaMinPct: 95, faixaTrilhaM: 30, raioEscolaM: 200, raioAtribuicaoM: 300, duracaoMediaH: 2.5 },
     metas: { aderenciaPlano: 95, completude: 95, aderenciaProgramacao: 90, slaCriticos: 100, eficacia: 90, slaA: 7, slaB: 30, slaC: 90 },
     tiposPlano: [
       ['BASE', 'Plano base (rede inteira)', 180, 'Periodicidade padrão de toda a rede'],
@@ -165,7 +165,8 @@ export const ESQUEMA = {
     { chave: 'coberturaMinPct', rotulo: 'Cobertura mínima do trecho para inspeção completa (%)', tipo: 'numero', min: 50, max: 100 },
     { chave: 'faixaTrilhaM', rotulo: 'Faixa do trajeto em volta da rede (m)', tipo: 'numero', min: 5, max: 200 },
     { chave: 'raioEscolaM', rotulo: 'Raio padrão em volta de escolas (m)', tipo: 'numero', min: 50, max: 2000 },
-    { chave: 'raioAtribuicaoM', rotulo: 'Distância máxima para ligar ocorrência a trecho/ativo (m)', tipo: 'numero', min: 50, max: 2000 }] },
+    { chave: 'raioAtribuicaoM', rotulo: 'Distância máxima para ligar ocorrência a trecho/ativo (m)', tipo: 'numero', min: 50, max: 2000 },
+    { chave: 'duracaoMediaH', rotulo: 'Duração média de interrupção para o CHI em risco (h)', tipo: 'numero', min: 0.1, max: 48 }] },
   risco: { titulo: 'Pesos do score de risco', tipo: 'objeto', editores: ADM, campos: Object.keys(RISCO).map((k) => ({ chave: k, rotulo: k, tipo: 'numero', min: 0 })) },
   ranking: { titulo: 'Pontuação do ranking', tipo: 'objeto', editores: ADM, campos: Object.keys(PADRAO.ranking).map((k) => ({ chave: k, rotulo: k, tipo: 'numero' })) },
   seguranca: { titulo: 'Política de acesso', tipo: 'objeto', editores: ADM, ajuda: 'Limites mínimos protegidos: não é possível afrouxar abaixo do permitido.', campos: [

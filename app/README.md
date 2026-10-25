@@ -36,6 +36,23 @@ No celular, a instalação como app (PWA) exige HTTPS — por exemplo, publicand
 | Produção da equipe e ranking ponderado por tipo de equipe (com penalidade por rejeição e estorno por reincidência) | RF-EQP-04, 05, §8 |
 | Offline-first: tudo grava no IndexedDB do aparelho; fila de sincronização visível; modo offline simulável | RF-INS-06, RNF-01 |
 
+## Interface (rodada de usabilidade moderna)
+
+| O quê | Como funciona |
+|---|---|
+| **Hoje** (tela de entrada) | Gestor/supervisor: no máximo 3 cartões de decisão (críticos sem data, críticos fora do prazo, congelar a semana, verificar execuções, saldo × críticos, gargalo, equipe achando pouco). Equipe: rota do dia na ordem do ponto mais próximo + inspeções em andamento. Auditor: integridade do log, ações negadas e parâmetros alterados na semana. Cada ação tocada vai para o log |
+| **Linha do tempo do defeito** | Identificado → Validado → Programado → Executado → Verificado, com data e dias em cada etapa; ⚠ quando a etapa passou do limite. Texto e ícone, não só cor |
+| **Painel enxuto** | 4 indicadores do funil em grade 2×2 com tendência de 12 semanas e variação da semana; fluxo em duas faixas (km: plano → em dia → inspecionado; defeitos: identificados → verificados) ligadas pela **taxa de achado por km**; cada etapa abre a lista filtrada; tabela alternativa. O resto fica em abas: Fluxo e gargalo, Execução, Risco, Eficácia, Custos, Ranking, Auditoria. Exportar/Imprimir no fim |
+| **Fluxo e gargalo** | Tempo em cada etapa (mediana, conta o que ainda está parado), idade da carteira (≤ 7 / 30 / 90 / > 90 dias por severidade), taxa de achado por equipe (alerta abaixo da metade da média), **CHI em risco (estimado)** = UCs com defeito A/B aberto × duração média (parâmetro) |
+| **Foto semanal** | Uma foto dos indicadores por semana guarda o histórico das tendências. Na demonstração, as 11 semanas anteriores são sintéticas e marcadas como tal |
+| **Mapa com uma visão por vez** | Defeitos · Plano · Semana (equipe: Pendências · Defeitos · Plano). A legenda mostra só o que vale na visão. Marcadores com letra/ícone (! A, B, C, V, I, P, ✓) e paleta validada para daltonismo |
+| **Busca única** | 🔍 no topo ou Ctrl+K, de qualquer tela: ativo, trecho, equipe ou tipo de defeito; setas e Enter |
+| **Modo sol** | ☀ no topo: alto contraste para tela ao ar livre (lembrado no aparelho) |
+| **Programação no celular** | Agenda por dia (Seg…Sex) com a lista por equipe; a tabela de 7 colunas fica só no computador |
+| Detalhes | Carregando… na primeira abertura de cada tela, vibração ao concluir inspeção/execução, topo com ícone + contador e iniciais no celular, selo DEMO no topo (não cobre botões) |
+
+Ficaram para depois do piloto, de propósito: **arrastar-e-soltar** na programação (WCAG 2.2 — 2.5.7 exige alternativa sem arrastar; no celular a agenda por dia já resolve) e **R$ por CHI evitado** (depende de probabilidade de falha calibrada com histórico; hoje seria um número frágil para argumentar orçamento).
+
 ## Login e logs
 
 - Entrar com **matrícula + senha**. Senha inicial de demonstração: `Rede@2026` (o app obriga a criar uma senha pessoal no primeiro acesso).
@@ -96,11 +113,11 @@ destaque só para o crítico (Von Restorff) e informação em blocos de 3–4 (M
 bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e
 ```
-Resultado atual: 47/47 verificações ponta a ponta e 0 pendências estáticas — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
+Resultado atual: 60/60 verificações ponta a ponta, 0 pendências estáticas e 0 violações de acessibilidade (axe-core, 16 telas) — relatório em [`docs/relatorio_seguranca_redeviva.md`](../docs/relatorio_seguranca_redeviva.md).
 
 ## Roteiro de demonstração (cenário §14 da especificação)
 
-1. Entre como `G1001` (**Gestão de Planejamento**, senha inicial `Rede@2026`, crie a sua) → **Painel**: aderência, compensação dos ativos críticos (≈ R$ 100 mil/mês nos trafos e chaves reincidentes), top 10 por risco.
+1. Entre como `G1001` (**Gestão de Planejamento**, senha inicial `Rede@2026`, crie a sua) → abre em **Hoje** com as 3 decisões do dia → **Painel**: funil, fluxo em duas faixas e, na aba *Risco*, compensação dos ativos críticos (≈ R$ 100 mil/mês nos trafos e chaves reincidentes) e top 10 por risco.
 2. **Plano** → *Importar plano (CSV)* → use *Exemplo para teste*: 6 linhas aceitas e 4 rejeitadas (fora da área, coordenada inválida, duplicada, critério incompatível).
 3. Menu do usuário → *Sair* → entre como `INS01` (**Equipe Inspeção 01**) → busque um trafo pelo código (ex.: `TR-07-03`).
 4. **⋯ Mais → 🎯 Simular posição** e toque no mapa perto do trafo: aparece o alerta de proximidade.
@@ -136,7 +153,11 @@ app/
   index.html, manifest.webmanifest, sw.js, icon*.{svg,png}
   css/app.css
   js/
-    main.js      sessão, navegação, GPS, alertas, filtros
+    main.js      sessão, navegação, GPS, alertas, filtros, visões do mapa, modo sol
+    hoje.js      tela Hoje (decisões do gestor, rota da equipe, alertas do auditor)
+    fluxo.js     linha do tempo, tempo por etapa, idade da carteira, taxa de achado, CHI em risco
+    historico.js foto semanal dos indicadores (tendências)
+    busca.js     busca única (Ctrl+K)
     dominio.js   catálogos, score de risco, motor de periodicidade, fluxo, ranking, indicadores
     acoes.js     comandos que alteram estado (com checagem de permissão)
     store.js     IndexedDB, auditoria, fila de sincronização

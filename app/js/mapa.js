@@ -1,6 +1,6 @@
 // Mapa (Leaflet + OSM). Produção: trocar por MapLibre + tiles vetoriais próprios (PMTiles), ver especificação §11.
 /* global L */
-import { el, toast } from './util.js';
+import { el, toast, hojeISO, semanaISO } from './util.js';
 import { estado, equipeDoUsuario } from './store.js';
 import { estadoAtivo, pendenciasDaEquipe, tipoDefeito, STATUS_ABERTOS, TIPOS_ATIVO } from './dominio.js';
 import { trechos as trechosInspecao, situacaoTrecho, areas, areaAtiva, tipoPlano } from './planos.js';
@@ -15,7 +15,41 @@ export const filtros = {
   alimentador: '',
   equipeTipo: '',
   minhaEquipe: false,
+  visao: 'defeitos', // uma codificação de cor por vez: defeitos | plano | semana | tudo (equipe)
 };
+
+/** Visões do mapa: cada uma mostra uma pergunta só (corrige a mistura de 3 codificações de cor). */
+export const VISOES = {
+  tudo: { nome: 'Pendências', dica: 'Tudo o que é da sua equipe: defeitos e inspeções' },
+  defeitos: { nome: 'Defeitos', dica: 'Defeitos abertos por severidade' },
+  plano: { nome: 'Plano', dica: 'Inspeções e trechos pela situação no plano' },
+  semana: { nome: 'Semana', dica: 'Programado e executado nesta semana' },
+};
+
+/** Estado do ativo dentro da visão escolhida. */
+function estadoNaVisao(d, a) {
+  const v = filtros.visao;
+  if (v === 'tudo') return estadoAtivo(d, a.id);
+  const neutro = a.criterios?.length ? { id: 'ok', nome: 'Em dia' } : { id: 'neutro', nome: 'Sem criticidade marcada' };
+  if (v === 'defeitos') {
+    const abertos = d.defeitos.filter((f) => f.ativoId === a.id && STATUS_ABERTOS.includes(f.status));
+    if (abertos.length) { const sev = ['A', 'B', 'C'].find((x) => abertos.some((f) => f.severidade === x)); return { id: `sev-${sev}`, nome: `Defeito aberto (${sev})` }; }
+    if (d.defeitos.some((f) => f.ativoId === a.id && f.status === 'EXECUTADO')) return { id: 'executado', nome: 'Executado — aguarda verificação' };
+    return neutro;
+  }
+  if (v === 'plano') {
+    const pend = d.inspecoes.filter((i) => i.ativoId === a.id && i.status !== 'CONCLUIDA');
+    const hoje = hojeISO();
+    if (pend.some((i) => i.prazo < hoje)) return { id: 'insp-vencida', nome: 'Inspeção vencida' };
+    if (pend.length) return { id: 'insp-pendente', nome: 'Inspeção programada' };
+    return neutro;
+  }
+  const semana = semanaISO(hojeISO());
+  const doAtivo = d.defeitos.filter((f) => f.ativoId === a.id);
+  if (doAtivo.some((f) => f.status === 'PROGRAMADO' && f.programacao?.semana === semana)) return { id: 'programada', nome: 'Programado nesta semana' };
+  if (doAtivo.some((f) => f.execucao && semanaISO(f.execucao.em.slice(0, 10)) === semana)) return { id: 'executado', nome: 'Executado nesta semana' };
+  return neutro;
+}
 
 export function iniciarMapa(container, cb) {
   retornos = cb;
@@ -99,7 +133,9 @@ export function limparArea() {
 
 function icone(ativo, est, selecionado) {
   const n = el('div', { class: `mk mk--${ativo.tipo.toLowerCase()} mk--${est.id}${selecionado ? ' mk--sel' : ''}` });
-  const tam = ativo.tipo === 'POSTE' ? 14 : 20;
+  // Marcador com estado que exige ação é maior e traz letra/ícone; em dia/neutro fica pequeno e discreto.
+  const acao = !['ok', 'neutro'].includes(est.id);
+  const tam = acao ? 22 : ativo.tipo === 'POSTE' ? 12 : 16;
   return L.divIcon({ html: n, className: 'mk-wrap', iconSize: [tam, tam] });
 }
 
@@ -109,7 +145,8 @@ export function renderizar(selecionadoId) {
   grupoTrechos.clearLayers();
   grupoAtivos.clearLayers();
   grupoAreas.clearLayers();
-  if (filtros.camadas.planos) {
+  const visao = filtros.visao;
+  if (filtros.camadas.planos && ['plano', 'tudo'].includes(visao)) {
     for (const a of areas().filter((x) => areaAtiva(x))) {
       const g = a.geometria;
       const dica = el('span', { text: `${tipoPlano(a.tipoPlano)?.nome || a.tipoPlano}: ${a.nome}` });
@@ -123,8 +160,8 @@ export function renderizar(selecionadoId) {
     // Trechos de inspeção (~1 km) coloridos pela situação no plano; toque abre a ficha do trecho.
     for (const t of ts) {
       if (filtros.alimentador && t.alimentador !== filtros.alimentador) continue;
-      const sit = situacaoTrecho(t);
-      const linha = L.polyline(t.coords, { className: `tronco tronco--${sit.id}`, weight: 7 });
+      const sit = ['plano', 'tudo'].includes(visao) ? situacaoTrecho(t) : { id: 'base' };
+      const linha = L.polyline(t.coords, { className: `tronco tronco--${sit.id}`, weight: sit.id === 'base' ? 5 : 7 });
       linha.on('click', (ev) => { L.DomEvent.stopPropagation(ev); if (!modo) retornos.onTrecho?.(t.id); });
       linha.addTo(grupoTrechos);
     }
@@ -139,8 +176,8 @@ export function renderizar(selecionadoId) {
   for (const a of d.ativos) {
     if (filtros.alimentador && a.alimentador !== filtros.alimentador) continue;
     if (relevantes && !relevantes.has(a.id)) continue;
-    const est = estadoAtivo(d, a.id);
-    const cat = est.id.startsWith('sev-') ? 'defeitos' : est.id.startsWith('insp-') ? 'inspecoes' : 'emDia';
+    const est = estadoNaVisao(d, a);
+    const cat = est.id.startsWith('sev-') || est.id === 'programada' ? 'defeitos' : est.id.startsWith('insp-') ? 'inspecoes' : 'emDia';
     if (!filtros.camadas[cat]) continue;
     if (filtros.equipeTipo && !d.defeitos.some((f) => f.ativoId === a.id && STATUS_ABERTOS.includes(f.status)
       && tipoDefeito(f.tipoId)?.equipes.includes(filtros.equipeTipo))) continue;

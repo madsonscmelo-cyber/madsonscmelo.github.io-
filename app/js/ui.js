@@ -17,6 +17,7 @@ import { concluirInspecao, transicionar, atribuirInspecao, ErroRegra } from './a
 import { campoFotos, galeria } from './fotos.js';
 import { logar } from './auditoria.js';
 import { custoDefeito } from './custos.js';
+import { elementoLinhaDoTempo } from './fluxo.js';
 
 // ---------- Sheet (com integração ao botão "voltar" do celular) ----------
 let atual = null; // { tipo: 'ativo'|'area'|'form', id }
@@ -146,6 +147,7 @@ export function cartaoDefeito(f, { comAtivo = false, aoAbrirAtivo } = {}) {
       chip(STATUS_DEFEITO[f.status], `chip--st-${f.status.toLowerCase()}`)),
   );
   if (f.descricao) card.append(el('p', { class: 'card-def__desc', text: f.descricao }));
+  if (!['REJEITADO', 'CANCELADO'].includes(f.status)) card.append(elementoLinhaDoTempo(f));
   const custo = f.execucao?.custo || custoDefeito(f);
   const info = [`Exige: ${td?.equipes.map((t) => TIPOS_EQUIPE[t]).join(' / ')}`,
     `${f.execucao?.custo ? 'Custo realizado' : 'Custo estimado'} ${fmtMoeda(custo.total)}${custo.unidade && custo.unidade !== 'un' ? ` (${custo.quantidade} ${custo.unidade})` : ''}`];
@@ -430,6 +432,7 @@ export function abrirFormInspecao({ ativos, inspecoes, avulsa = false }) {
     }));
     if (ok) {
       removerRascunho(chave);
+      navigator.vibrate?.([60, 40, 60]); // confirmação tátil: em campo, com luva ou sol, o toque nem sempre é visto
       toast(r.defeitos.length ? `Inspeção concluída com ${r.defeitos.length} defeito(s).` : 'Inspeção concluída sem anomalia.', { tipo: 'ok' });
       if (ativos.length === 1) abrirAtivo(ativos[0].id); else fecharSheet();
     }
@@ -461,6 +464,7 @@ export function abrirExecucao(f) {
     const g = geo.geo();
     if (!g.dentroDoRaio && !geo.justificativa().trim()) { toast('Fora do raio: informe a justificativa.', { tipo: 'erro' }); return; }
     if (tratar(() => transicionar(f, 'EXECUTADO', { atividade: ativ.value.trim(), materiais: mat.value.trim(), quantidade: medido ? Math.max(1, Number(qtdExec.value) || 1) : undefined, fotos: fotos.fotos(), geo: g, justificativa: g.dentroDoRaio ? undefined : geo.justificativa() }))) {
+      navigator.vibrate?.([60, 40, 60]);
       toast('Execução registrada. Aguarda verificação do supervisor.', { tipo: 'ok' });
       abrirAtivo(a.id);
     }

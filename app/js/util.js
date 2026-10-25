@@ -8,6 +8,12 @@ export const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
 /** Cria elemento de forma segura. attrs: class, text, on<Evento>, dataset, demais atributos. */
 export function el(tag, attrs = {}, ...filhos) {
   const n = document.createElement(tag);
+  // Acessibilidade (WCAG 2.1.1): área com rolagem horizontal precisa ser alcançável e nomeada para teclado e leitor de tela.
+  if (String(attrs?.class || '').split(' ').includes('tabela-wrap')) {
+    n.tabIndex = 0;
+    n.setAttribute('role', 'region');
+    if (!attrs['aria-label']) n.setAttribute('aria-label', 'Tabela — use as setas para rolar');
+  }
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k === 'class') n.className = v;
@@ -21,6 +27,11 @@ export function el(tag, attrs = {}, ...filhos) {
   for (const f of filhos.flat()) {
     if (f === null || f === undefined || f === false) continue;
     n.append(f instanceof Node ? f : document.createTextNode(String(f)));
+  }
+  // Nome único por tabela (WCAG landmark-unique): usa as primeiras colunas do cabeçalho.
+  if (n.getAttribute('aria-label') === 'Tabela — use as setas para rolar') {
+    const cols = [...n.querySelectorAll('thead th')].slice(0, 3).map((th) => th.textContent.trim()).filter(Boolean);
+    if (cols.length) n.setAttribute('aria-label', `Tabela: ${cols.join(', ')} — use as setas para rolar`);
   }
   return n;
 }

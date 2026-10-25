@@ -31,8 +31,10 @@ function registrar(id, nome, passou, evidencia) {
   const SENHA_INICIAL = 'Rede@2026', SENHA_NOVA = 'Torre#Verde2026';
   const sairDoApp = async (p) => { await p.click('#btn-usuario'); await p.click('.menu__item:has-text("Sair")'); await p.waitForSelector('#login input[autocomplete=username]'); };
   /** Login real: matrícula + senha; no primeiro acesso cria a senha pessoal (política exige troca). */
-  const entrar = async (p, nome) => {
+  const entrar = async (p, nome, { ficarEmHoje = false } = {}) => {
     const mat = MATRICULAS[nome] || nome;
+    // Espera o app terminar de iniciar (tela de login ou sessão retomada) antes de decidir.
+    await p.waitForFunction(() => !document.querySelector('#login').hidden || document.querySelector('#nav').childElementCount > 0, null, { timeout: 20000 });
     if (await p.locator('#login').isHidden()) await sairDoApp(p);
     p.__trocadas ||= new Set();
     await p.fill('#login input[autocomplete=username]', mat);
@@ -47,6 +49,8 @@ function registrar(id, nome, passou, evidencia) {
       p.__trocadas.add(mat);
     }
     await p.waitForTimeout(300);
+    // O app abre na tela Hoje; a maior parte dos cenários começa no mapa.
+    if (!ficarEmHoje && await p.locator('#nav > .nav__btn[data-view=mapa]').count()) { await p.click('#nav > .nav__btn[data-view=mapa]'); await p.waitForTimeout(200); }
   };
   /** Navega pela barra inferior; telas extras ficam no menu "Mais". */
   const irPara = async (p, tela) => {
@@ -190,6 +194,8 @@ function registrar(id, nome, passou, evidencia) {
       await pa.fill('#login input[autocomplete=current-password]', senha);
       await pa.click('#login button[type=submit]');
       await pa.waitForFunction(() => document.querySelector('.login__msg')?.textContent || document.querySelector('#login input[autocomplete=new-password]') || document.querySelector('#login').hidden, null, { timeout: 15000 });
+      await pa.waitForFunction(() => !document.querySelector('#login button[type=submit]')?.disabled, null, { timeout: 15000 }).catch(() => {});
+      await pa.waitForTimeout(150); // a mensagem final pode ser reescrita; ler só depois de o login terminar
       const msg = await pa.locator('.login__msg').first().innerText().catch(() => '');
       await pa.evaluate(() => { const m = document.querySelector('.login__msg'); if (m) m.textContent = ''; });
       return msg;
@@ -354,10 +360,10 @@ function registrar(id, nome, passou, evidencia) {
     await pp.waitForTimeout(400);
     const logsProg = await pp.evaluate(async () => (await (await import('./js/auditoria.js')).todosLogs()).map((l) => l.acao));
     registrar('PROG-1', 'Programar acima do orçamento pede confirmação e fica registrado', logsProg.includes('ORCAMENTO_EXCEDIDO_CIENTE') && logsProg.includes('DEFEITO_PROGRAMADO'), `${nomeAlvo} em ${codAlvo}`);
-    const quadroTem = await pp.locator('.ativ', { hasText: codAlvo }).count();
+    const quadroTem = await pp.locator('.quadro .ativ', { hasText: codAlvo }).count();
     await pp.click('button:has-text("Congelar programação da semana")');
     await pp.waitForTimeout(300);
-    await pp.locator('.ativ', { hasText: codAlvo }).first().click();
+    await pp.locator('.quadro .ativ', { hasText: codAlvo }).first().click();
     const amanha = await pp.evaluate(async () => { const u = await import('./js/util.js'); return u.proximoDiaUtil(u.proximoDiaUtil()); });
     await pp.fill('#sheet input[type=date]', amanha);
     await pp.click('#sheet-rodape button:has-text("Salvar reprogramação")');
@@ -469,7 +475,9 @@ function registrar(id, nome, passou, evidencia) {
     registrar('EFIC-1', 'Ocorrências importadas e atribuídas: não evitável fica fora; trecho recém-inspecionado não cai em "Plano"', efic.importadas === 2 && efic.desc === 'EXCLUIDA' && efic.recente !== 'PLANO' && efic.soma === efic.total,
       `${efic.importadas} importadas · descarga → ${efic.desc} · desarme estrutural no trecho inspecionado hoje → ${efic.recente} · eficácia ${(efic.eficacia * 100).toFixed(0)}%`);
     await irPara(pk, 'painel');
-    registrar('FUNIL-1', 'Painel mostra o funil Plano → Inspeção → Programação → Eficácia', await pk.locator('.funil .kpi').count() === 4, (await pk.locator('.funil .kpi__rotulo').allInnerTexts()).join(' · '));
+    registrar('FUNIL-1', 'Painel mostra os 4 indicadores do funil (Plano → Inspeção → Programação → Eficácia) com tendência', await pk.locator('.kpis--2x2 .kpi--tend').count() === 4 && await pk.locator('.kpis--2x2 svg.spark').count() === 4, (await pk.locator('.kpis--2x2 .kpi__rotulo').allInnerTexts()).join(' · '));
+    await pk.click('#aba-painel-eficacia');
+    registrar('FUNIL-2', 'Aba Eficácia mostra em que etapa cada desarme evitável falhou', await pk.locator('#painel-aba-conteudo .funil .barras__linha').count() === 4, (await pk.locator('#painel-aba-conteudo .barras__rot').allInnerTexts()).join(' · ').slice(0, 160));
     await pk.screenshot({ path: path.join(SAIDA, 'funil.png'), fullPage: true });
     await ck.close();
 
@@ -499,7 +507,8 @@ function registrar(id, nome, passou, evidencia) {
     await po.reload();
     await po.waitForSelector('#login input[autocomplete=username], .nav__btn', { timeout: 10000 });
     if (await po.locator('#login').isVisible()) await entrar(po, 'Equipe Inspeção 01');
-    await po.fill('.busca__inp', 'P-07-010');
+    else await irPara(po, 'mapa');
+    await po.fill('#view-mapa .busca__inp', 'P-07-010');
     await po.click('.busca__item');
     await po.waitForTimeout(2500);
     const quadros = await po.locator('.leaflet-tile-loaded').count();
@@ -552,6 +561,89 @@ function registrar(id, nome, passou, evidencia) {
     registrar('1.4', 'App se recusa a rodar dentro de iframe (clickjacking)', /não pode ser aberto dentro de outra página/.test(txtFrame), txtFrame.slice(0, 80));
     await ctx2.close();
 
+
+    // ================= Interface: Hoje, fluxo, mapa por visão, busca única, modo sol =================
+    const cg = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+    const g = await cg.newPage();
+    vigiar(g);
+    g.on('dialog', (dl) => dl.accept());
+    await g.goto(BASE);
+    await entrar(g, 'Gestão de Planejamento', { ficarEmHoje: true });
+    const abriuHoje = await g.locator('#view-hoje').isVisible();
+    const cartoes = await g.locator('#view-hoje .hoje-card').count();
+    const titulos = await g.locator('#view-hoje .hoje-card__tit').allInnerTexts();
+    registrar('HOJE-1', 'Gestor entra na tela Hoje com no máximo 3 decisões', abriuHoje && cartoes >= 1 && cartoes <= 3, `${cartoes} cartão(ões): ${titulos.join(' · ')}`);
+    await g.locator('#view-hoje .hoje-card button').first().click();
+    await g.waitForTimeout(400);
+    const logHoje = await g.evaluate(async () => (await (await import('./js/auditoria.js')).todosLogs()).filter((l) => l.acao === 'HOJE_ACAO').length);
+    const foiPara = await g.evaluate(() => [...document.querySelectorAll('.view')].find((v) => !v.hidden)?.id);
+    registrar('HOJE-2', 'Ação do cartão leva à tela certa e fica no log', logHoje >= 1 && foiPara !== 'view-hoje', `foi para ${foiPara} · ${logHoje} registro(s) HOJE_ACAO`);
+
+    // Linha do tempo e indicadores de fluxo
+    const fl = await g.evaluate(async () => {
+      const F = await import('./js/fluxo.js'); const { estado } = await import('./js/store.js');
+      const f = estado.dados.defeitos.find((x) => x.status === 'VERIFICADO');
+      const lt = F.linhaDoTempo(f);
+      const tp = F.temposPorEtapa(); const id = F.idadeCarteira(); const tx = F.taxaAchado(); const chi = F.chiEmRisco();
+      const abertos = estado.dados.defeitos.filter((x) => ['IDENTIFICADO', 'VALIDADO', 'PROGRAMADO'].includes(x.status)).length;
+      return { feitas: lt.etapas.filter((e) => e.feito).length, total: lt.total, gargalo: tp.gargalo?.nome, somaIdade: id.reduce((t, x) => t + x.total, 0), abertos, taxa: tx.media, chi: chi.chi, ucs: chi.ucs, h: chi.duracaoH };
+    });
+    registrar('FLUXO-1', 'Linha do tempo, tempo por etapa, idade da carteira e CHI em risco consistentes', fl.feitas === 5 && fl.somaIdade === fl.abertos && fl.taxa > 0 && Math.abs(fl.chi - fl.ucs * fl.h) < 1e-6,
+      `verificado: 5/5 etapas em ${fl.total} d · gargalo ${fl.gargalo} · carteira ${fl.somaIdade}/${fl.abertos} · ${fl.taxa?.toFixed(2)} def/km · CHI ${Math.round(fl.chi)} = ${fl.ucs} UCs × ${fl.h} h`);
+    await irPara(g, 'defeitos');
+    const tl = await g.locator('.card-def .tl').first().locator('.tl__passo').count();
+    const tlSr = await g.locator('.card-def .tl .sr-only').first().innerText();
+    registrar('FLUXO-2', 'Cartão do defeito mostra a linha do tempo em 5 etapas, com texto para leitor de tela', tl === 5 && /em \d{2}\/\d{2}\/\d{4}/.test(tlSr), `${tl} etapas · "${tlSr}"`);
+
+    // Funil clicável: etapa → lista filtrada
+    await irPara(g, 'painel');
+    const verBtn = g.locator('.funil2__etapa', { hasText: 'Programado' }).locator('.btn--mini');
+    const rot = await verBtn.innerText();
+    await verBtn.click();
+    await g.waitForTimeout(400);
+    const chipFiltro = await g.locator('#view-defeitos .chip--filtro').innerText().catch(() => '');
+    const nCards = await g.locator('#view-defeitos .card-def').count();
+    registrar('FUNIL-3', 'Etapa do funil abre a lista de Defeitos já filtrada', /Programado/.test(chipFiltro) && `Ver ${nCards}` === rot, `${rot} → ${nCards} cartão(ões) · filtro "${chipFiltro.trim()}"`);
+    const hist = await g.evaluate(async () => { const H = await import('./js/historico.js'); const s = H.serie('kmi'); return { n: s.pontos.length, validos: s.pontos.filter((p) => p.valor !== null).length, sint: s.sintetico }; });
+    registrar('HIST-1', 'Foto semanal: 12 semanas de tendência (anteriores marcadas como sintéticas)', hist.n === 12 && hist.validos === 12 && hist.sint, `${hist.validos}/${hist.n} semanas · sintético: ${hist.sint}`);
+
+    // Mapa: uma visão por vez, legenda adaptada
+    await irPara(g, 'mapa');
+    const contar = () => g.evaluate(() => ({ sev: document.querySelectorAll('.leaflet-marker-pane .mk--sev-A, .leaflet-marker-pane .mk--sev-B, .leaflet-marker-pane .mk--sev-C').length, insp: document.querySelectorAll('.leaflet-marker-pane .mk--insp-vencida, .leaflet-marker-pane .mk--insp-pendente').length,
+      trechoCor: document.querySelectorAll('.tronco--vencido, .tronco--vencendo, .tronco--emdia').length, legenda: [...document.querySelectorAll('.legenda__grupo[data-visoes]')].filter((x) => !x.hidden).map((x) => x.querySelector('strong').textContent) }));
+    const vDef = await contar();
+    await g.click('.visoes__btn:has-text("Plano")'); await g.waitForTimeout(300);
+    const vPlano = await contar();
+    registrar('MAPA-1', 'Mapa mostra uma codificação de cor por vez (Defeitos × Plano) e a legenda acompanha', vDef.sev > 0 && vDef.insp === 0 && vDef.trechoCor === 0 && vPlano.sev === 0 && vPlano.insp > 0 && vPlano.trechoCor > 0 && vDef.legenda.join() !== vPlano.legenda.join(),
+      `Defeitos: ${vDef.sev} marcadores de severidade, ${vDef.insp} de inspeção, legenda [${vDef.legenda}] · Plano: ${vPlano.insp} de inspeção, ${vPlano.trechoCor} trechos coloridos, legenda [${vPlano.legenda}]`);
+    await g.click('.visoes__btn:has-text("Defeitos")');
+
+    // Busca única (Ctrl+K)
+    await irPara(g, 'painel');
+    await g.keyboard.press('Control+k');
+    await g.fill('#busca-global .busca__inp', 'ALM-07-T03');
+    await g.keyboard.press('Enter');
+    await g.waitForTimeout(700);
+    const sheetTit = await g.locator('#sheet-titulo').innerText().catch(() => '');
+    registrar('BUSCA-1', 'Ctrl+K busca trecho de qualquer tela e abre a ficha no mapa', (await g.locator('#view-mapa').isVisible()) && /ALM-07-T03/.test(sheetTit), `ficha: "${sheetTit}"`);
+    await g.keyboard.press('Control+k');
+    await g.fill('#busca-global .busca__inp', 'poda');
+    const tipos = await g.locator('#busca-global .busca__item .muted').allInnerTexts();
+    await g.fill('#busca-global .busca__inp', 'ninho');
+    tipos.push(...await g.locator('#busca-global .busca__item .muted').allInnerTexts());
+    await g.keyboard.press('Escape');
+    registrar('BUSCA-2', 'Busca encontra equipe e tipo de defeito pelo nome', tipos.some((t) => /Equipe/.test(t)) && tipos.some((t) => /Defeito/.test(t)) && await g.locator('#busca-global').isHidden(), tipos.slice(0, 4).join(' | '));
+
+    // Modo sol
+    await g.click('#btn-sol');
+    const sol = await g.evaluate(() => ({ tema: document.documentElement.dataset.theme, fundo: getComputedStyle(document.body).backgroundColor, salvo: localStorage.getItem('redeviva-sol') }));
+    await g.reload();
+    await g.waitForTimeout(800);
+    const solDepois = await g.evaluate(() => document.documentElement.dataset.theme);
+    registrar('SOL-1', 'Modo sol liga alto contraste e é lembrado no aparelho', sol.tema === 'sol' && sol.fundo === 'rgb(255, 255, 255)' && solDepois === 'sol', `tema ${sol.tema} · fundo ${sol.fundo} · após recarregar: ${solDepois}`);
+    await g.click('#btn-sol');
+    await cg.close();
+
     // ================= Fase 8 — 360 px e alvos de toque ≥ 48 px =================
     const ctx3 = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, serviceWorkers: 'block' });
     const m = await ctx3.newPage();
@@ -571,7 +663,11 @@ function registrar(id, nome, passou, evidencia) {
       await m.screenshot({ path: path.join(SAIDA, `360-${tela}.png`) });
     };
     await medir('login');
-    await entrar(m, 'Equipe Inspeção 02');
+    await entrar(m, 'Equipe Inspeção 02', { ficarEmHoje: true });
+    await medir('hoje-equipe');
+    const paradas = await m.locator('#view-hoje .rota__item').count();
+    registrar('HOJE-3', 'Equipe abre na rota do dia (paradas na ordem do mais próximo)', paradas > 0, `${paradas} parada(s) · ${await m.locator('#view-hoje .tela__topo .muted').innerText()}`);
+    await irPara(m, 'mapa');
     await medir('mapa');
     await m.click('#ctrl-mais'); await medir('mapa-mais'); await m.click('#ctrl-mais');
     await m.click('#ctrl-filtros'); await medir('filtros'); await m.click('#ctrl-filtros');
@@ -592,13 +688,19 @@ function registrar(id, nome, passou, evidencia) {
     registrar('8.9', 'Botão voltar do celular fecha o painel sem sair do app', await m.locator('#sheet').isHidden() && m.url().includes('/app/'), m.url());
     await irPara(m, 'defeitos'); await medir('defeitos');
     await irPara(m, 'producao'); await medir('producao');
-    await entrar(m, 'Gestão de Planejamento');
+    await entrar(m, 'Gestão de Planejamento', { ficarEmHoje: true });
+    await medir('hoje-gestor');
     await irPara(m, 'painel'); await medir('painel');
     await irPara(m, 'plano'); await medir('plano');
     await irPara(m, 'acesso'); await m.waitForTimeout(500); await medir('acesso');
     await irPara(m, 'programacao'); await m.waitForTimeout(400); await medir('programacao');
+    const agendaVisivel = await m.locator('#view-programacao .agenda').isVisible();
+    const tabelaVisivel = await m.locator('#view-programacao .quadro').isVisible();
+    await m.locator('#view-programacao .agenda__dia').nth(1).click(); await m.waitForTimeout(300);
+    const diaSel = await m.locator('#view-programacao .agenda__dia.ativo').getAttribute('aria-label');
+    registrar('AGENDA-1', 'Programação no celular: agenda por dia em vez da tabela de 7 colunas', agendaVisivel && !tabelaVisivel && /Ter/.test(diaSel), `agenda visível, tabela oculta · dia escolhido: ${diaSel}`);
     await irPara(m, 'parametros'); await m.waitForTimeout(400); await medir('parametros');
-    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '15 telas verificadas');
+    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '17 telas verificadas');
     registrar('8.2', 'Alvos de toque ≥ 48 px', !pequenos.length, pequenos.length ? `${pequenos.length} abaixo: ${pequenos.slice(0, 6).join('; ')}` : 'todos os controles visíveis ≥ 48 px');
     await ctx3.close();
 

@@ -85,6 +85,7 @@ export const PARAM = {
   faixaTrilhaM: 30,
   raioEscolaM: 200,
   raioAtribuicaoM: 300,
+  duracaoMediaH: 2.5, // [SUPOSIÇÃO] duração média de uma interrupção; usada só no "CHI em risco (estimado)"
   sla: { A: 7, B: 30, C: 90 },
   metas: { aderenciaPlano: 0.95, completude: 0.95, aderenciaProgramacao: 0.9, slaCriticos: 1, eficacia: 0.9 },
 };

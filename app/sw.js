@@ -1,12 +1,12 @@
 // Service worker: app shell em network-first (pega atualização quando há rede) e tiles em cache-first.
-const VERSAO = 'redeviva-v8';
+const VERSAO = 'redeviva-v9';
 const TILES = 'redeviva-tiles';
 const PACOTES = 'redeviva-pacotes'; // mapas dos pacotes offline: nunca aparados automaticamente
 const MAX_TILES = 1500;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'css/app.css',
   'vendor/leaflet/leaflet.css', 'vendor/leaflet/leaflet.js',
-  'js/main.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/mapa.js', 'js/ui.js', 'js/telas.js', 'js/acoes.js', 'js/fotos.js', 'js/offline.js', 'js/config.js', 'js/auth.js', 'js/auditoria.js', 'js/acesso.js', 'js/parametros.js', 'js/parametros-ui.js', 'js/custos.js', 'js/programacao.js', 'js/rede.js', 'js/planos.js', 'js/trilha.js', 'js/eficacia.js',
+  'js/main.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/mapa.js', 'js/ui.js', 'js/telas.js', 'js/acoes.js', 'js/fotos.js', 'js/offline.js', 'js/config.js', 'js/auth.js', 'js/auditoria.js', 'js/acesso.js', 'js/parametros.js', 'js/parametros-ui.js', 'js/custos.js', 'js/programacao.js', 'js/rede.js', 'js/planos.js', 'js/trilha.js', 'js/eficacia.js', 'js/fluxo.js', 'js/historico.js', 'js/hoje.js', 'js/busca.js',
   'modelos/template-plano.csv', 'modelos/exemplo-plano-com-erros.csv', 'modelos/template-caderno.csv', 'modelos/template-ocorrencias.csv', 'modelos/exemplo-voo-drone-ALM-07-T03.kml',
 ];
 

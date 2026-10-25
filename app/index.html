@@ -8,6 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#0b5d3b">
   <title>RedeViva — Plano de Manutenção</title>
+  <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -16,13 +17,15 @@
 </head>
 <body>
   <header class="topo">
-    <div class="topo__marca"><img src="icon.svg" alt="" width="28" height="28"><span>RedeViva</span></div>
+    <div class="topo__marca"><img src="icon.svg" alt="" width="28" height="28"><span>RedeViva</span><span class="selo-topo" title="Protótipo com dados sintéticos">DEMO</span></div>
     <div class="topo__status">
-      <span id="st-rede" class="chip">—</span>
-      <span id="st-sync" class="chip">—</span>
+      <span id="st-rede" class="chip" role="status">—</span>
+      <span id="st-sync" class="chip" role="status">—</span>
     </div>
+    <button id="btn-busca" type="button" class="topo__btn" aria-label="Buscar ativo, trecho, defeito ou equipe (Ctrl+K)" title="Buscar (Ctrl+K)" hidden><span aria-hidden="true">🔍</span></button>
+    <button id="btn-sol" type="button" class="topo__btn" aria-pressed="false" aria-label="Modo sol: alto contraste para uso ao ar livre" title="Modo sol (alto contraste)"><span aria-hidden="true">☀</span></button>
     <div class="topo__usuario">
-      <button id="btn-usuario" type="button" class="chip chip--btn" aria-haspopup="menu">Entrar</button>
+      <button id="btn-usuario" type="button" class="chip chip--btn" aria-haspopup="menu" aria-label="Menu do usuário">Entrar</button>
       <div id="menu-usuario" class="menu" hidden></div>
     </div>
   </header>
@@ -37,26 +40,29 @@
       <div id="painel-filtros" class="flutuante filtros-mapa" hidden></div>
       <details class="legenda">
         <summary>Legenda</summary>
-        <div class="legenda__grupo"><strong>Defeito aberto</strong>
-          <span class="leg"><i class="mk mk--poste mk--sev-A"></i>A crítico</span>
-          <span class="leg"><i class="mk mk--poste mk--sev-B"></i>B</span>
-          <span class="leg"><i class="mk mk--poste mk--sev-C"></i>C</span></div>
-        <div class="legenda__grupo"><strong>Inspeção</strong>
+        <p id="legenda-visao" class="legenda__visao"></p>
+        <div class="legenda__grupo" data-visoes="tudo defeitos"><strong>Defeito aberto</strong>
+          <span class="leg"><i class="mk mk--poste mk--sev-A"></i>Crítico (A)</span>
+          <span class="leg"><i class="mk mk--poste mk--sev-B"></i>Severidade B</span>
+          <span class="leg"><i class="mk mk--poste mk--sev-C"></i>Severidade C</span>
+          <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado (verificar)</span></div>
+        <div class="legenda__grupo" data-visoes="tudo plano"><strong>Inspeção</strong>
           <span class="leg"><i class="mk mk--poste mk--insp-vencida"></i>Vencida</span>
           <span class="leg"><i class="mk mk--poste mk--insp-pendente"></i>Programada</span></div>
-        <div class="legenda__grupo"><strong>Situação</strong>
-          <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado</span>
-          <span class="leg"><i class="mk mk--poste mk--ok"></i>Em dia</span></div>
-        <div class="legenda__grupo"><strong>Trecho (plano por km)</strong>
+        <div class="legenda__grupo" data-visoes="semana"><strong>Nesta semana</strong>
+          <span class="leg"><i class="mk mk--poste mk--programada"></i>Programado</span>
+          <span class="leg"><i class="mk mk--poste mk--executado"></i>Executado</span></div>
+        <div class="legenda__grupo" data-visoes="tudo plano"><strong>Trecho (plano por km)</strong>
           <span class="leg"><i class="leg-linha leg-linha--emdia"></i>Em dia</span>
-          <span class="leg"><i class="leg-linha leg-linha--vencendo"></i>Vence em 15 dias</span>
-          <span class="leg"><i class="leg-linha leg-linha--vencido"></i>Vencido</span></div>
-        <div class="legenda__grupo"><strong>Ativo</strong>
-          <span class="leg"><i class="mk mk--poste mk--neutro"></i>Poste</span>
-          <span class="leg"><i class="mk mk--trafo mk--neutro"></i>Trafo</span>
-          <span class="leg"><i class="mk mk--chave_fusivel mk--neutro"></i>Chave</span></div>
+          <span class="leg"><i class="leg-linha leg-linha--vencendo"></i>Vence em 15 dias (pontilhado)</span>
+          <span class="leg"><i class="leg-linha leg-linha--vencido"></i>Vencido (tracejado)</span></div>
+        <div class="legenda__grupo"><strong>Ativo sem pendência nesta visão</strong>
+          <span class="leg"><i class="mk mk--poste mk--ok"></i>Poste</span>
+          <span class="leg"><i class="mk mk--trafo mk--ok"></i>Trafo</span>
+          <span class="leg"><i class="mk mk--chave_fusivel mk--ok"></i>Chave</span></div>
       </details>
     </section>
+    <section id="view-hoje" class="view tela" hidden></section>
     <section id="view-defeitos" class="view tela" hidden></section>
     <section id="view-plano" class="view tela" hidden></section>
     <section id="view-painel" class="view tela" hidden></section>
@@ -78,8 +84,8 @@
 
   <nav id="nav" class="nav" aria-label="Navegação principal"></nav>
   <div id="toasts" class="toasts" aria-live="polite"></div>
-  <div id="login" class="login" hidden></div>
-  <div class="selo-demo" aria-hidden="true">PROTÓTIPO · DADOS SINTÉTICOS</div>
+  <div id="login" class="login" role="region" aria-label="Acesso ao RedeViva" hidden></div>
+  <div id="busca-global" class="busca-global" role="dialog" aria-modal="true" aria-label="Busca" hidden></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="js/main.js"></script>

@@ -10,7 +10,7 @@ import { abrirSheet, fecharSheet } from './ui.js';
 import { logar } from './auditoria.js';
 
 const DIAS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-const estadoTela = { semana: null, sev: '', categoria: '' };
+const estadoTela = { semana: null, sev: '', categoria: '', dia: null };
 const pode = () => ['GESTOR', 'SUPERVISOR'].includes(estado.usuario.perfil);
 const mesNome = (mes) => new Date(`${mes}-15T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
@@ -167,17 +167,37 @@ export function telaProgramacao(raiz, { abrirNoMapa }) {
         el('td', { text: fmtMoeda(custo) }));
     }))));
 
+  // Agenda por dia (celular): um dia por vez, lista por equipe. Mesmo conteúdo do quadro, sem rolar 7 colunas.
+  if (!uteis.includes(estadoTela.dia)) estadoTela.dia = uteis.includes(hojeISO()) ? hojeISO() : uteis[0];
+  const doDia = programados.filter((f) => f.programacao.data === estadoTela.dia);
+  const agenda = el('div', { class: 'agenda' },
+    el('div', { class: 'agenda__dias', role: 'tablist', 'aria-label': 'Dia da semana' }, uteis.map((dia, i) => {
+      const n = programados.filter((f) => f.programacao.data === dia).length;
+      return el('button', { type: 'button', role: 'tab', 'aria-selected': String(dia === estadoTela.dia), class: `agenda__dia${dia === estadoTela.dia ? ' ativo' : ''}${dia === hojeISO() ? ' agenda__dia--hoje' : ''}`,
+        'aria-label': `${DIAS[i]} ${fmtData(dia)}: ${n} atividade(s)`, onclick: () => { estadoTela.dia = dia; rerender(); } },
+        el('span', { text: DIAS[i] }), el('strong', { text: fmtData(dia).slice(0, 2) }), el('span', { class: 'agenda__n', text: n ? String(n) : '·' }));
+    })),
+    doDia.length ? el('div', { class: 'agenda__lista' }, equipes.filter((e) => doDia.some((f) => f.programacao.equipeId === e.id)).map((e) => el('section', { class: 'agenda__equipe' },
+      el('h3', { text: `${e.nome} · ${TIPOS_EQUIPE[e.tipo]}` }),
+      el('ul', { class: 'lista' }, doDia.filter((f) => f.programacao.equipeId === e.id).map((f) => el('li', {},
+        el('button', { type: 'button', class: `ativ ativ--${f.severidade}${f.execucao ? ' ativ--feita' : ''} ativ--linha`, onclick: () => abrirItem(f, { semana, abrirNoMapa, uteis }) },
+          el('span', { text: `${f.execucao ? '✓ ' : ''}${ativoPorId(f.ativoId)?.codigo} · sev. ${f.severidade}` }), el('span', { class: 'ativ__det', text: `${tipoDefeito(f.tipoId)?.nome} · ${horasDefeito(f).toFixed(1)} h · ${fmtMoeda(f.execucao?.custo?.total ?? custoDefeito(f).total)}` }))))))))
+      : el('p', { class: 'muted', text: 'Nada programado neste dia.' }));
+
   // Indicadores
   const ad = aderenciaSemana(semana);
   const ultimas = Object.keys(d.congelamentos || {}).sort().slice(-6).map((s) => aderenciaSemana(s)).filter((x) => x?.vencidos);
   const motivosTot = {};
   ultimas.forEach((x) => Object.entries(x.motivos).forEach(([k, v]) => { motivosTot[k] = (motivosTot[k] || 0) + v; }));
   const sla = slaCriticos();
-  const kpi = (r, v, det, c = '') => el('div', { class: `kpi ${c}` }, el('span', { class: 'kpi__rotulo', text: r }), el('strong', { class: 'kpi__valor', text: v }), el('span', { class: 'kpi__det', text: det }));
+  const kpi = (r, v, det, c = '', etiqueta = null) => el('div', { class: `kpi ${c}` }, el('span', { class: 'kpi__rotulo', text: r }), el('strong', { class: 'kpi__valor', text: v }),
+    etiqueta ? el('span', { class: 'etiqueta', text: etiqueta }) : null, el('span', { class: 'kpi__det', text: det }));
   const adGeral = ultimas.reduce((t, x) => ({ v: t.v + x.vencidos, c: t.c + x.conformes }), { v: 0, c: 0 });
   const proj = projecaoCarteira();
   const indicadores = el('div', { class: 'kpis' },
-    kpi('Aderência da semana', ad?.pct === null || !ad ? (cong ? 'em andamento' : 'não congelada') : fmtPct(ad.pct), ad ? `${ad.conformes} de ${ad.vencidos} vencidos · ${ad.itens} no congelado` : 'congele para medir', ad?.pct !== null && ad?.pct < PARAM.metas.aderenciaProgramacao ? 'kpi--alerta' : ''),
+    // O número fica sempre no lugar do número; o estado da semana vira etiqueta.
+    kpi('Aderência da semana', ad?.pct === null || !ad ? '—' : fmtPct(ad.pct), ad ? `${ad.conformes} de ${ad.vencidos} vencidos · ${ad.itens} no congelado` : 'congele para medir', ad && ad.pct !== null && ad.pct < PARAM.metas.aderenciaProgramacao ? 'kpi--alerta' : '',
+      !cong ? '🔓 Semana não congelada' : ad?.pct === null ? '🔒 Em andamento' : null),
     kpi('Aderência (últimas semanas)', adGeral.v ? fmtPct(adGeral.c / adGeral.v) : '—', `${ultimas.length} semana(s) congelada(s) · meta ${fmtPct(PARAM.metas.aderenciaProgramacao)}`, adGeral.v && adGeral.c / adGeral.v < PARAM.metas.aderenciaProgramacao ? 'kpi--alerta' : ''),
     kpi(`Defeitos A em até ${sla.prazo} dias`, sla.pct === null ? '—' : fmtPct(sla.pct), `${sla.noPrazo} no prazo · ${sla.vencidos} fora`, sla.pct !== null && sla.pct < PARAM.metas.slaCriticos ? 'kpi--critico' : ''),
     kpi('Carteira sem data', fmtMoeda(proj.reduce((t, p) => t + p.valor, 0)), `${proj.reduce((t, p) => t + p.qtd, 0)} defeito(s) · críticos ${fmtMoeda(proj.reduce((t, p) => t + p.valorCriticos, 0))}`));
@@ -188,7 +208,7 @@ export function telaProgramacao(raiz, { abrirNoMapa }) {
     el('header', { class: 'tela__topo' }, el('h1', { text: 'Programação' }),
       el('button', { type: 'button', class: 'btn btn--txt', text: 'Exportar semana (CSV)', onclick: () => exportarSemana(semana, programados) })),
     nav, indicadores, orcBox,
-    el('section', { class: 'bloco' }, el('h2', { text: 'Quadro da semana' }), quadro,
+    el('section', { class: 'bloco' }, el('h2', { text: 'Quadro da semana' }), el('div', { class: 'so-celular' }, agenda), el('div', { class: 'so-computador' }, quadro),
       el('p', { class: 'muted pequeno', text: 'Toque numa atividade para reprogramar (com motivo, se a semana estiver congelada) ou abrir no mapa.' })),
     carteiraBox,
     pareto.length ? el('section', { class: 'bloco' }, el('h2', { text: 'Por que a programação não foi cumprida (últimas semanas congeladas)' }),

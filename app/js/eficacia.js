@@ -116,18 +116,15 @@ export function importarOcorrencias(texto, arquivo) {
 // ---------- Telas ----------
 const kpi = (r, v, det, c = '') => el('div', { class: `kpi ${c}` }, el('span', { class: 'kpi__rotulo', text: r }), el('strong', { class: 'kpi__valor', text: v }), el('span', { class: 'kpi__det', text: det }));
 
-/** Funil do Painel: plano → inspeção → programação → eficácia, e onde cada desarme evitável falhou. */
-export function secaoFunil({ kmi, completude, aderenciaProg }) {
+/** Aba Eficácia do Painel: em qual etapa (plano, inspeção, programação, manutenção) cada desarme evitável falhou. */
+export function secaoFalhas() {
   const ef = indicadoresEficacia();
-  const meta = PARAM.metas;
   const etapas = ['PLANO', 'INSPECAO', 'PROGRAMACAO', 'MANUTENCAO'];
   const max = Math.max(1, ...etapas.map((k) => ef.porPortao[k].qtd));
-  return el('section', { class: 'bloco funil' }, el('h2', { text: 'Funil da manutenção (últimos 180 dias)' }),
+  return el('section', { class: 'bloco funil' }, el('h2', { text: 'Eficácia (últimos 180 dias)' }),
     el('div', { class: 'kpis' },
-      kpi('1 · Aderência ao plano (KMI)', fmtPct(kmi.aderencia), `${kmi.kmEmDia.toFixed(1)} de ${kmi.km.toFixed(1)} km em dia · meta ${fmtPct(meta.aderenciaPlano)}`, kmi.aderencia < meta.aderenciaPlano ? 'kpi--alerta' : ''),
-      kpi('2 · Inspeções completas', completude.pct === null ? '—' : fmtPct(completude.pct), `${completude.completas}/${completude.realizadas} em 90 dias · ${completude.kmPatrulhado.toFixed(1)} km só patrulhados`, completude.pct !== null && completude.pct < meta.completude ? 'kpi--alerta' : ''),
-      kpi('3 · Aderência da programação', aderenciaProg === null ? '—' : fmtPct(aderenciaProg), `semanas congeladas · meta ${fmtPct(meta.aderenciaProgramacao)}`, aderenciaProg !== null && aderenciaProg < meta.aderenciaProgramacao ? 'kpi--alerta' : ''),
-      kpi('4 · Eficácia', ef.eficacia === null ? '—' : fmtPct(ef.eficacia), `inspeção ${ef.eficInspecao === null ? '—' : fmtPct(ef.eficInspecao)} · manutenção ${ef.eficManutencao === null ? '—' : fmtPct(ef.eficManutencao)} · meta ${fmtPct(meta.eficacia)}`, ef.eficacia !== null && ef.eficacia < meta.eficacia ? 'kpi--critico' : '')),
+      kpi('Eficácia da inspeção', ef.eficInspecao === null ? '—' : fmtPct(ef.eficInspecao), `${ef.falhaInsp} trecho(s) inspecionado(s) com desarme evitável de ${ef.baseInsp}`),
+      kpi('Eficácia da manutenção', ef.eficManutencao === null ? '—' : fmtPct(ef.eficManutencao), `${ef.falhaMan} execução(ões) com desarme depois, de ${ef.baseMan}`)),
     el('h3', { text: `Onde os desarmes evitáveis falharam (${ef.evitaveis} de ${ef.ocorrencias.length} ocorrências)` }),
     el('div', { class: 'barras' }, etapas.map((k) => {
       const preench = el('span', { class: 'barras__preench alerta' });

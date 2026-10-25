@@ -13,6 +13,8 @@ import { criarArea, trechoPorId, tiposPlano } from './planos.js';
 import * as mapa from './mapa.js';
 import { abrirAtivo, abrirArea, abrirFormInspecao, fecharSheet, sheetAtual, retomarRascunho, abrirSheet } from './ui.js';
 import { telaDefeitos, telaPlano, telaPainel, telaProducao } from './telas.js';
+import { telaHoje } from './hoje.js';
+import { abrirBusca, listaResultados } from './busca.js';
 import { criarAtivoAvulso } from './acoes.js';
 import { logar } from './auditoria.js';
 import { POLITICA, iniciarSessao, retomarSessao, encerrarSessao, registrarAtividade, situacaoSessao, revalidarUsuario } from './auth.js';
@@ -20,18 +22,20 @@ import { telaLogin, telaTrocaSenha, telaBloqueio, telaAcesso } from './acesso.js
 
 const TODOS = ['GESTOR', 'SUPERVISOR', 'EQUIPE'];
 // Ordem = prioridade na barra inferior (Hick: no máximo 5 botões; o resto vai para "Mais").
+// "Hoje" abre primeiro: a primeira ação útil do perfil, sem procurar número (tela de entrada).
 const VIEWS = {
+  hoje: { rotulo: 'Hoje', icone: '☀️', perfis: [...TODOS, 'AUDITOR'], render: telaHoje },
   mapa: { rotulo: 'Mapa', icone: '🗺️', perfis: TODOS },
-  defeitos: { rotulo: 'Defeitos', icone: '⚠️', perfis: [...TODOS, 'AUDITOR'], render: telaDefeitos },
   programacao: { rotulo: 'Programação', icone: '🗓️', perfis: ['GESTOR', 'SUPERVISOR', 'AUDITOR'], render: telaProgramacao },
   painel: { rotulo: 'Painel', icone: '📊', perfis: ['GESTOR', 'SUPERVISOR', 'AUDITOR'], render: telaPainel },
+  defeitos: { rotulo: 'Defeitos', icone: '⚠️', perfis: [...TODOS, 'AUDITOR'], render: telaDefeitos },
   plano: { rotulo: 'Plano', icone: '📋', perfis: ['GESTOR', 'SUPERVISOR'], render: telaPlano },
   producao: { rotulo: 'Produção', icone: '🏆', perfis: TODOS, render: telaProducao },
   parametros: { rotulo: 'Parâmetros', icone: '⚙️', perfis: ['ADMIN', 'GESTOR', 'AUDITOR'] },
   acesso: { rotulo: 'Acesso', icone: '🔐', perfis: ['ADMIN', 'GESTOR', 'AUDITOR'], render: telaAcesso },
 };
 
-let viewAtual = 'mapa', selecionado = null, gpsId = null, areaAtiva = null, houveOffline = false;
+let viewAtual = 'hoje', selecionado = null, gpsId = null, areaAtiva = null, houveOffline = false;
 const alertados = new Set();
 
 // ---------------- Sessão ----------------
@@ -46,6 +50,8 @@ function aposEntrar() {
   const u = estado.usuario;
   $('#login').hidden = true;
   mapa.filtros.minhaEquipe = u.perfil === 'EQUIPE';
+  mapa.filtros.visao = u.perfil === 'EQUIPE' ? 'tudo' : 'defeitos';
+  $('#btn-busca').hidden = false;
   montarNav();
   montarFiltros();
   atualizarTopo();
@@ -104,7 +110,13 @@ function mostrar(id) {
   $$('.view').forEach((v) => { v.hidden = v.id !== `view-${id}`; });
   $$('.nav__btn').forEach((b) => b.classList.toggle('ativo', b.dataset.view === id || (b.dataset.extras || '').split(',').includes(id)));
   if (id !== 'mapa') fecharSheet();
-  renderizarAtual();
+  const raiz = $(`#view-${id}`);
+  if (VIEWS[id].render && id !== 'acesso' && !raiz.childElementCount) {
+    // Primeira abertura: indicação de carregamento antes do cálculo (telas com muitos indicadores).
+    raiz.setAttribute('aria-busy', 'true');
+    raiz.replaceChildren(el('p', { class: 'carregando', role: 'status', text: 'Carregando…' }));
+    requestAnimationFrame(() => setTimeout(() => { raiz.removeAttribute('aria-busy'); if (viewAtual === id) renderizarAtual(); }, 0));
+  } else renderizarAtual();
   if (id === 'mapa') setTimeout(() => mapa.mapaLeaflet().invalidateSize(), 30);
   if (id === 'acesso') telaAcesso($('#view-acesso'));
   if (id === 'parametros') telaParametros($('#view-parametros'));
@@ -117,11 +129,13 @@ function renderizarAtual() {
   renderizarTopoMapa();
   const v = VIEWS[viewAtual];
   // A tela de logs é lida sob demanda (não a cada alteração de dados), para não recarregar a tabela enquanto se lê.
-  if (v.render && viewAtual !== 'acesso') v.render($(`#view-${viewAtual}`), { abrirNoMapa, abrirTrechoNoMapa, desenharNoMapa });
+  if (v.render && viewAtual !== 'acesso') v.render($(`#view-${viewAtual}`), contextoTelas());
   const s = sheetAtual();
   if (s?.tipo === 'ativo') abrirAtivo(s.id);
   else if (s?.tipo === 'area' && areaAtiva) abrirArea(mapa.ativosNaArea(areaAtiva), limparArea);
 }
+
+const contextoTelas = () => ({ abrirNoMapa, abrirTrechoNoMapa, desenharNoMapa, irPara: mostrar });
 
 function abrirNoMapa(ativoId) {
   const a = ativoPorId(ativoId);
@@ -198,9 +212,17 @@ function atualizarTopo() {
   rede.className = `chip ${on ? 'chip--ok' : 'chip--alerta'}`;
   const sync = $('#st-sync');
   const f = resumoFila();
-  sync.textContent = f.total ? `${f.dados ? `${f.dados} registro(s)` : ''}${f.dados && f.fotos ? ' · ' : ''}${f.fotos ? `${f.fotos} foto(s)` : ''} a enviar` : d.ultimaSync ? `Sincronizado ${fmtDataHora(d.ultimaSync)}` : 'Sem pendências';
+  const texto = f.total ? `${f.dados ? `${f.dados} registro(s)` : ''}${f.dados && f.fotos ? ' · ' : ''}${f.fotos ? `${f.fotos} foto(s)` : ''} a enviar` : d.ultimaSync ? `Sincronizado ${fmtDataHora(d.ultimaSync)}` : 'Sem pendências';
+  // Celular: ícone + contador (o texto completo fica no nome acessível e na dica).
+  sync.replaceChildren(el('span', { 'aria-hidden': 'true', text: f.total ? '⇅' : '✓' }), el('span', { class: 'chip__curto', 'aria-hidden': 'true', text: f.total ? String(f.total) : '' }), el('span', { class: 'chip__longo', text: texto }));
+  sync.title = texto;
+  sync.setAttribute('aria-label', `Sincronização: ${texto}`);
   sync.className = `chip ${d.fila.length ? 'chip--aviso' : ''}`;
-  if (estado.usuario) $('#btn-usuario').textContent = `${estado.usuario.nome} ▾`;
+  if (estado.usuario) {
+    const ini = estado.usuario.nome.split(/\s+/).filter((p) => p.length > 2 || /^[A-Z0-9]/.test(p)).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+    $('#btn-usuario').replaceChildren(el('span', { class: 'chip__curto', 'aria-hidden': 'true', text: `${ini} ▾` }), el('span', { class: 'chip__longo', text: `${estado.usuario.nome} ▾` }));
+    $('#btn-usuario').setAttribute('aria-label', `Menu do usuário: ${estado.usuario.nome}`);
+  }
 }
 
 function menuUsuario() {
@@ -315,6 +337,9 @@ function renderizarTopoMapa() {
   const topo = $('#mapa-topo');
   if (!topo || !estado.usuario) return;
   if (!topo.querySelector('.busca')) topo.append(montarBusca());
+  topo.querySelector('.visoes')?.remove();
+  topo.querySelector('.busca').after(montarVisoes());
+  atualizarLegenda();
   topo.querySelector('.progresso-dia')?.remove();
   topo.querySelectorAll('.rascunho').forEach((n) => n.remove());
   const eq = equipeDoUsuario();
@@ -343,18 +368,30 @@ function progressoDoDia(eq) {
 }
 
 function montarBusca() {
-  const lista = el('div', { class: 'busca__res', role: 'listbox' });
-  const inp = el('input', { type: 'search', class: 'busca__inp', placeholder: '🔍 Buscar ativo (ex.: TR-07-03)', 'aria-label': 'Buscar ativo pelo código', autocomplete: 'off', maxlength: 30 });
-  const fechar = () => { lista.replaceChildren(); inp.value = ''; };
-  inp.addEventListener('input', () => {
-    const q = inp.value.trim().toUpperCase();
-    if (q.length < 2) { lista.replaceChildren(); return; }
-    const achados = estado.dados.ativos.filter((a) => a.codigo.includes(q)).slice(0, 6);
-    lista.replaceChildren(...(achados.length ? achados.map((a) => el('button', { type: 'button', class: 'busca__item', role: 'option', onclick: () => { logar({ categoria: 'LEITURA', acao: 'BUSCA_ATIVO', detalhe: { termo: inp.value.trim() } }); fechar(); inp.blur(); abrirNoMapa(a.id); } },
-      el('strong', { text: a.codigo }), el('span', { class: 'muted', text: `${TIPOS_ATIVO[a.tipo]} · ${a.alimentador}` }))) : [el('div', { class: 'busca__vazio muted', text: 'Nenhum ativo com esse código.' })]));
-  });
-  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') lista.querySelector('.busca__item')?.click(); });
+  const inp = el('input', { type: 'search', class: 'busca__inp', placeholder: '🔍 Ativo, trecho, defeito ou equipe', 'aria-label': 'Buscar ativo, trecho, defeito ou equipe', autocomplete: 'off', maxlength: 40 });
+  const lista = listaResultados(inp, contextoTelas(), () => { inp.value = ''; lista.replaceChildren(); inp.blur(); });
   return el('div', { class: 'busca' }, inp, lista);
+}
+
+/** Uma visão por vez no mapa (Defeitos | Plano | Semana); a legenda mostra só os grupos daquela visão. */
+function montarVisoes() {
+  const ids = estado.usuario.perfil === 'EQUIPE' ? ['tudo', 'defeitos', 'plano'] : ['defeitos', 'plano', 'semana'];
+  return el('div', { class: 'visoes', role: 'group', 'aria-label': 'Visão do mapa' }, ids.map((id) => el('button', {
+    type: 'button', class: `visoes__btn${mapa.filtros.visao === id ? ' ativo' : ''}`, 'aria-pressed': String(mapa.filtros.visao === id), title: mapa.VISOES[id].dica, text: mapa.VISOES[id].nome,
+    onclick: () => { mapa.filtros.visao = id; logar({ categoria: 'NAVEGACAO', acao: 'VISAO_MAPA', detalhe: { visao: id } }); mapa.renderizar(selecionado); renderizarTopoMapa(); } })));
+}
+function atualizarLegenda() {
+  const v = mapa.filtros.visao;
+  $$('.legenda__grupo[data-visoes]').forEach((g) => { g.hidden = !g.dataset.visoes.split(' ').includes(v); });
+  const t = $('#legenda-visao');
+  if (t) t.textContent = `Visão: ${mapa.VISOES[v].nome} — ${mapa.VISOES[v].dica.toLowerCase()}`;
+}
+
+/** Modo sol: alto contraste para tela ao ar livre (preferência do aparelho, não sincroniza). */
+function aplicarSol(ligado) {
+  if (ligado) document.documentElement.dataset.theme = 'sol'; else delete document.documentElement.dataset.theme;
+  $('#btn-sol')?.setAttribute('aria-pressed', String(ligado));
+  try { localStorage.setItem('redeviva-sol', ligado ? '1' : '0'); } catch { /* sem storage: vale só nesta sessão */ }
 }
 
 function montarFiltros() {
@@ -437,6 +474,18 @@ async function iniciar() {
   montarControles();
   $('#sheet-fechar').addEventListener('click', fecharSheet);
   $('#btn-usuario').addEventListener('click', menuUsuario);
+  $('#btn-busca').addEventListener('click', () => abrirBusca(contextoTelas()));
+  let sol = false;
+  try { sol = localStorage.getItem('redeviva-sol') === '1'; } catch { /* sem storage */ }
+  aplicarSol(sol);
+  $('#btn-sol').addEventListener('click', () => {
+    const ligar = document.documentElement.dataset.theme !== 'sol';
+    aplicarSol(ligar);
+    logar({ categoria: 'NAVEGACAO', acao: ligar ? 'MODO_SOL_LIGADO' : 'MODO_SOL_DESLIGADO' });
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && estado.usuario && $('#login').hidden) { e.preventDefault(); abrirBusca(contextoTelas()); }
+  });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { fecharMais(); if (mapa.modoAtual()) mapa.definirModo(mapa.modoAtual()); else fecharSheet(); } });
   document.addEventListener('sheet-fechado', () => { if (selecionado) { selecionado = null; mapa.renderizar(null); } });
   eventos.addEventListener('mudou', () => { aplicarParametros(); if (completarCustosSemValor()) persistir(); renderizarAtual(); atualizarTopo(); });

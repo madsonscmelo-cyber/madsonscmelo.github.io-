@@ -48,7 +48,7 @@ export function telaParametros(raiz) {
       editavel ? el('td', {}, el('button', { type: 'button', class: 'btn btn--txt', text: 'remover', 'aria-label': `Remover linha ${i + 1}`, onclick: () => { r.splice(i, 1); rerender(); } })) : null)));
     editor = el('div', {},
       el('div', { class: 'tabela-wrap' }, el('table', { class: 'tabela tabela--param' },
-        el('thead', {}, el('tr', {}, ...esq.campos.map((c) => el('th', { text: c.rotulo, title: c.tipo === 'multi' ? c.opcoes().map(([k]) => k).join(', ') : '' })), editavel ? el('th', {}) : null)), corpo)),
+        el('thead', {}, el('tr', {}, ...esq.campos.map((c) => el('th', { text: c.rotulo, title: c.tipo === 'multi' ? c.opcoes().map(([k]) => k).join(', ') : '' })), editavel ? el('th', {}, el('span', { class: 'sr-only', text: 'Ações' })) : null)), corpo)),
       editavel ? el('div', { class: 'linha' },
         el('button', { type: 'button', class: 'btn btn--sec', text: '＋ Adicionar linha', onclick: () => { r.push(Object.fromEntries(esq.campos.map((c) => [c.chave, c.tipo === 'numero' ? 0 : c.tipo === 'multi' ? [] : c.tipo === 'bool' ? false : c.tipo === 'selecao' ? c.opcoes()[0][0] : '']))); rerender(); } }),
         esq.importavel ? importador(grupo, esq, rerender) : null) : null);

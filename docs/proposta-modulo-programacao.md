@@ -1,4 +1,4 @@
-# Proposta — Módulo de Programação e funil Plano → Inspeção → Programação → Eficácia
+# Proposta — Módulo de Programação, planos configuráveis e custo (v2)
 
 Para aprovação ("liberar") antes da implementação. Marcações: **[CERTEZA]**, **[PROVÁVEL]**, **[SUPOSIÇÃO]**.
 
@@ -132,26 +132,116 @@ Eficácia = 1 − (trechos/ativos com desarme por causa evitável relacionada, n
 
 ---
 
-## 6. Decisões para liberar
+## 6. Inspeção oportunista pelas equipes de emergência
 
-| # | Decisão | Opções / recomendação |
-|---|---|---|
-| 1 | O que é "KMI" | km de rede inspecionada (assumido) ou outro |
-| 2 | Janelas da eficácia | Recomendo 180 dias para poda e estrutura; 90 dias para trafo e chave |
-| 3 | Lista de causas evitáveis | Validar a matriz do item 2.4 com a tabela de causas do OMS |
-| 4 | Congelamento da programação | Dia e hora (recomendo sexta, 12h) e quem congela (supervisor) |
-| 5 | Drone | Quem analisa as imagens e em quanto tempo os defeitos entram no sistema |
-| 6 | Fonte das ocorrências | Exportação CSV do OMS no início; integração depois |
+Equipes de emergência rodam a rede todos os dias. O app passa a deixar qualquer equipe ligar o **modo patrulha**: a trilha GPS é gravada e o sistema calcula quantos km de cada trecho do plano foram percorridos.
+
+| Situação | Como conta |
+|---|---|
+| Patrulha que cumpre o critério de inspeção completa (cobertura ≥ 95% do trecho + checklist + fotos) | **Conta no plano** (KMI), como qualquer inspeção |
+| Patrulha parcial (só passou pelo trecho, sem checklist completo) | Vira **km patrulhado**, indicador separado; **não** soma no KMI |
+| Defeito visto na patrulha | Entra no fluxo normal (identificado → validado → programado) |
+
+> Discordância preventiva: deixar o "km rodado" da emergência contar direto no KMI infla a aderência sem inspeção de verdade [PROVÁVEL]. Por isso só conta quando cumpre o mesmo critério de completude.
 
 ---
 
-## 7. Implementação proposta [SUPOSIÇÃO de prazo]
+## 7. Tipos de plano configuráveis
+
+Cada plano passa a ter um **tipo**, uma **área** (trechos, ativos ou um polígono desenhado no mapa) e suas próprias regras. Exemplos:
+
+| Tipo de plano | Área | Regras típicas | Vigência |
+|---|---|---|---|
+| **Trecho ouro** | Trechos que alimentam cargas críticas (hospital, indústria, maior CHI) | Periodicidade curta, inspeção completa obrigatória, SLA de defeito mais curto | Permanente |
+| **Área urbana** | Polígono urbano | Periodicidade e checklist urbanos | Permanente |
+| **Segurança — escolas** | Raio configurável em volta de cada escola (ex.: 200 m) | Checklist de segurança (cabo baixo, poste inclinado, estrutura acessível); defeito de risco a terceiros sempre severidade A | Permanente |
+| **Evento** (ex.: micareta) | Polígono do circuito + vias de acesso | Inspeção antes do evento, plantão durante, prazo de execução até a véspera | Data de início e fim |
+| **Plano especial** | Livre | Tudo configurável | Com ou sem data |
+
+Um mesmo trecho pode estar em mais de um plano (ex.: trecho ouro dentro de área urbana). O indicador é calculado **por plano**, e o painel permite ver cada um separado ou todos juntos.
+
+---
+
+## 8. Administração de parâmetros
+
+Tudo o que é regra vira parâmetro, com tela de administração, **vigência** (data a partir da qual vale) e registro no log.
+
+| Grupo | Parâmetros |
+|---|---|
+| Planos | Tipos de plano, áreas e polígonos, raio de escolas, vigência de eventos, metas por plano |
+| Inspeção | Critérios, periodicidades, checklists por tipo de ativo e por tipo de plano, cobertura mínima (%), faixa do trajeto (m), fotos mínimas, raio de validação (m) |
+| Defeitos | Catálogo, categorias, severidade padrão, equipes aptas, "resolve na hora", prazo (SLA) por severidade |
+| Programação | Dia/hora de congelamento, motivos de reprogramação, horas-homem por equipe, tempo-padrão por serviço |
+| Eficácia | Matriz causa × atividade, janelas (dias), causas excluídas |
+| Risco | Pesos do score (severidade, clientes, DEC/FEC, compensação, reincidência), faixas de cor |
+| Ranking | Pontos por tipo de ação, estornos, teto diário, regras do Caçador de risco |
+| Campo | Raio do alerta de proximidade, validade do pacote offline, fotos só no Wi-Fi |
+| Custos | Caderno de serviços, composições por defeito, fatores regionais (item 9) |
+
+**Regras de governança dos parâmetros**
+1. **Vigência obrigatória** [CERTEZA de necessidade]: mudar uma meta ou uma janela **não recalcula o passado**. O indicador de setembro continua com a regra de setembro. Sem isso, os números históricos mudam a cada ajuste e perdem credibilidade.
+2. Toda alteração fica no log (quem, quando, valor anterior e novo).
+3. Parâmetros de segurança (política de senha, bloqueios, sessão) ficam num grupo separado, só com perfil de administrador de segurança.
+4. Perfil novo: **Administrador** (parâmetros) separado de **Gestor** (operação).
+
+---
+
+## 9. Módulo de custos — caderno de serviços
+
+### 9.1 Estrutura
+
+| Elemento | Conteúdo |
+|---|---|
+| **Caderno de serviços** (importado por planilha) | Código do item, descrição, unidade (un, m, vão, km, h), preço unitário, contrato/empreiteira, regional, vigência |
+| **Composição por tipo de defeito** | Lista de itens do caderno × quantidade-padrão. Ex.: "Substituição de cruzeta" = 1 cruzeta + 1 serviço de troca + 2 isoladores + deslocamento |
+| **Custo de inspeção** | R$/km terrestre, R$/km drone, R$/ativo pontual |
+| **Fator regional** | Multiplicador por polo/regional (urbano × rural, distância de base) |
+
+### 9.2 O que o sistema calcula
+
+| Cálculo | Fórmula |
+|---|---|
+| **Custo-padrão do defeito** | Σ (quantidade-padrão × preço vigente) × fator regional |
+| **Custo realizado** | Itens apontados na execução × preço vigente na data |
+| **Projeção da carteira** | Σ custo-padrão dos defeitos abertos, por mês programado, severidade, alimentador e plano |
+| **Custo do plano de inspeção** | km programados × R$/km (terrestre ou drone) + ativos × R$/ativo |
+| **Orçado × realizado** | Por mês, polo, plano e tipo de serviço |
+| **Eficiência** | R$ por CHI evitado e R$ por compensação evitada, por tipo de serviço e por plano |
+
+### 9.3 Cuidados
+
+- **Média esconde variação** [PROVÁVEL]: poda urbana alta custa várias vezes a poda rural baixa. Por isso composição por tipo + fator regional, e não uma média única por defeito.
+- **Preço do caderno é dado de contrato** [CERTEZA]: não pode ir para a versão pública. No protótipo, só preços fictícios.
+- A projeção vira compromisso de orçamento só depois de calibrada com o realizado de 2–3 meses.
+
+---
+
+## 10. Decisões para liberar
+
+| # | Decisão | Recomendação |
+|---|---|---|
+| 1 | O que é "KMI" | km de rede inspecionada |
+| 2 | Janelas da eficácia | 180 dias poda/estrutura; 90 dias trafo/chave |
+| 3 | Causas evitáveis | Validar a matriz do item 2.4 com os códigos do OMS |
+| 4 | Congelamento da programação | Sexta, 12h, pelo supervisor |
+| 5 | Drone | Quem analisa as imagens e em quanto tempo |
+| 6 | Ocorrências | Planilha do OMS no início |
+| 7 | Patrulha da emergência | Só conta no KMI se cumprir a inspeção completa (recomendado) |
+| 8 | Tipos de plano iniciais | Trecho ouro, urbano, escolas (raio 200 m), evento, especial |
+| 9 | Perfil Administrador | Separado do Gestor (recomendado) |
+| 10 | Caderno de serviços | Formato da planilha atual (colunas) para eu montar o importador |
+
+---
+
+## 11. Implementação proposta [SUPOSIÇÃO de prazo]
 
 | Etapa | Entrega | Duração |
 |---|---|---|
-| 1 | Plano por km (trechos com comprimento) + indicador 2.1 + completude com trilha GPS | 1 semana |
-| 2 | Tela Programação (carteira, quadro semanal, congelamento, motivos) + indicadores 2.3 | 1 semana |
-| 3 | Importação de ocorrências + matriz de causas + eficácia 2.4 + atribuição por portão | 1 semana |
-| 4 | Modo drone + painel do funil + ranking ajustado + testes | 1 semana |
+| 1 | Administração de parâmetros com vigência + perfil Administrador | 1 semana |
+| 2 | Tipos de plano e áreas (trechos, polígonos, raio de escolas, eventos) + plano por km | 1 semana |
+| 3 | Inspeção completa com trilha GPS + modo patrulha + modo drone | 1 semana |
+| 4 | Tela Programação (carteira, quadro semanal, congelamento, motivos) | 1 semana |
+| 5 | Ocorrências + matriz de causas + eficácia + painel do funil | 1 semana |
+| 6 | Caderno de serviços, composições, custo-padrão/realizado, projeção e orçado × realizado | 1 semana |
 
-No protótipo, tudo com dados sintéticos (inclusive ocorrências), para validar a regra com a equipe antes de usar dados reais.
+Tudo com dados e preços fictícios no protótipo.

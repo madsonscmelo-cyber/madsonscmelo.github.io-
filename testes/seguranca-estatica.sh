@@ -58,5 +58,19 @@ grep -q "throw new Error('Configuração de produção ausente" rotina/js/config
 grep -q "\^\[=+\\\\-@\]" rotina/js/util.js && ok "4.8 rotina: exportação CSV neutraliza fórmulas" || falha "4.8 rotina: CSV injection"
 if grep -nE "https?://" rotina/index.html rotina/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// " >/dev/null; then falha "rotina: chamada a domínio externo"; grep -nE "https?://" rotina/index.html rotina/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// "; else ok "rotina: nenhum domínio externo (sem CDN, sem fonte, sem API de terceiros)"; fi
 
+# ---------------- Central de Demandas (demandas/) — mesmos critérios ----------------
+echo; echo "== Central de Demandas =="
+if grep -rnE 'service_role|sbp_[A-Za-z0-9]|eyJhbGciOi|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY' demandas >/dev/null; then falha "6.1 possível segredo em demandas/"; else ok "6.1 nenhum segredo no código da central de demandas"; fi
+if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function\(' demandas/js/*.js >/dev/null; then
+  falha "6.3 sink de XSS na central de demandas"; grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function\(' demandas/js/*.js
+else ok "6.3 nenhum sink de XSS (innerHTML/eval) na central de demandas"; fi
+grep -q "Content-Security-Policy" demandas/index.html && ok "1.3 CSP declarada no index.html da central de demandas (meta)" || falha "1.3 CSP ausente na central de demandas"
+grep -q "frame-ancestors 'none'" demandas/_headers && ok "1.4 frame-ancestors/X-Frame-Options prontos em demandas/_headers" || falha "1.4 demandas/_headers sem frame-ancestors"
+grep -q "window.top !== window.self" demandas/js/main.js && ok "1.4 proteção anti-iframe na central de demandas" || falha "1.4 central de demandas sem proteção anti-iframe"
+grep -q "throw new Error('Configuração de produção ausente" demandas/js/config.js && ok "6.7 demandas: sem config de produção o app não inicia" || falha "6.7 demandas: fallback silencioso para demo"
+grep -q "\^\[=+\\\\-@\]" demandas/js/util.js && ok "4.8 demandas: exportação CSV neutraliza fórmulas" || falha "4.8 demandas: CSV injection"
+grep -q "LADO_MAX = 1280" demandas/js/nova.js && ok "8.5 demandas: imagem anexada reduzida a ≤1280 px e regravada sem EXIF" || falha "8.5 demandas: imagem sem compressão"
+if grep -nE "https?://" demandas/index.html demandas/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// " >/dev/null; then falha "demandas: chamada a domínio externo"; grep -nE "https?://" demandas/index.html demandas/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// "; else ok "demandas: nenhum domínio externo (sem CDN, sem fonte, sem API de terceiros)"; fi
+
 echo; [ $FALHAS -eq 0 ] && echo "Resultado: 0 pendências estáticas" || echo "Resultado: $FALHAS pendência(s)"
 exit $FALHAS

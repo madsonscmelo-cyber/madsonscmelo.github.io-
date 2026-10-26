@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1d4ea8">
+  <title>Central de Demandas — Supervisores</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo__marca"><img src="icon.svg" alt="" width="28" height="28"><span>Central de Demandas</span><span class="selo-topo" title="Protótipo com dados sintéticos">DEMO</span></div>
+    <div class="topo__status">
+      <span id="st-rede" class="chip" role="status">—</span>
+      <span id="st-sync" class="chip" role="status">—</span>
+    </div>
+    <button id="btn-sol" type="button" class="topo__btn" aria-pressed="false" aria-label="Modo sol: alto contraste" title="Modo sol (alto contraste)"><span aria-hidden="true">☀</span></button>
+    <div class="topo__usuario">
+      <button id="btn-usuario" type="button" class="chip chip--btn" aria-haspopup="menu" aria-label="Menu do usuário">Entrar</button>
+      <div id="menu-usuario" class="menu" hidden></div>
+    </div>
+  </header>
+
+  <main class="principal">
+    <section id="view-agenda" class="view tela" hidden></section>
+    <section id="view-nova" class="view tela" hidden></section>
+    <section id="view-rituais" class="view tela" hidden></section>
+    <section id="view-painel" class="view tela" hidden></section>
+    <section id="view-acesso" class="view tela" hidden></section>
+  </main>
+
+  <aside id="sheet" class="sheet" hidden aria-labelledby="sheet-titulo">
+    <div class="sheet__alca" aria-hidden="true"></div>
+    <div class="sheet__cab">
+      <h2 id="sheet-titulo">—</h2>
+      <button id="sheet-fechar" type="button" class="btn btn--txt" aria-label="Fechar painel">✕</button>
+    </div>
+    <div id="sheet-corpo" class="sheet__corpo" tabindex="0"></div>
+    <div id="sheet-rodape" class="sheet__rodape" hidden></div>
+  </aside>
+
+  <nav id="nav" class="nav" aria-label="Navegação principal"></nav>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="login" class="login" role="region" aria-label="Acesso à Central de Demandas" hidden></div>
+
+  <script src="js/compat.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

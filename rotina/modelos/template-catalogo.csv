@@ -1,0 +1,6 @@
+codigo;atividade;governanca;indicador;cargo_r;corresponsaveis;aprovador_a;periodicidade;situacao;duracao_min;horario;dia_semana;regra_mes;evidencia;destino_transferencia
+AT-900;Exemplo de atividade diária;Comercial;Recebíveis;TCO;;SUPERVISOR;D;R;30;08:30;;;Relatório enviado ao grupo da UTD;
+AT-901;Exemplo de atividade semanal;Qualidade;DEC/FEC;TMN;ESP;SUPERVISOR;W;R;60;;3;;Planilha atualizada;
+AT-902;Exemplo de atividade mensal;Gestão UTD;Gestão UTD;ESP;;SUPERVISOR;M;R;120;;;U;Apresentação enviada à gerência;
+AT-903;Exemplo de transferência;Logística;Materiais;ACO;;SUPERVISOR;W;T;60;;2;;Relatório entregue;Logística
+AT-904;Exemplo sob demanda;Qualidade;—;AGE;;;S;S;60;;;;;

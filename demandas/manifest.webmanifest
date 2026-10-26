@@ -1,0 +1,17 @@
+{
+  "name": "Central de Demandas — Supervisores",
+  "short_name": "Demandas",
+  "description": "Pedidos aos supervisores com prazo, dono, radar de imprevistos e histórico (protótipo com dados sintéticos).",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f5f9",
+  "theme_color": "#1d4ea8",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

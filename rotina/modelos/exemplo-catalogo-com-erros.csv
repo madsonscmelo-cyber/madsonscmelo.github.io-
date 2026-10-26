@@ -1,0 +1,9 @@
+codigo;atividade;governanca;indicador;cargo_r;corresponsaveis;aprovador_a;periodicidade;situacao;duracao_min;horario;dia_semana;regra_mes;evidencia;destino_transferencia
+AT-950;Conferência diária da fila de notas;Comercial;Eficácia da demanda;TCO;;SUPERVISOR;D;R;30;09:00;;;Fila conferida no sistema;
+AT-951;Reunião semanal de alinhamento;Gestão UTD;Gestão UTD;ESP;;SUPERVISOR;W;R;60;;5;;Ata enviada;
+AT-952;Fechamento mensal de horas;Pessoas;Custos;AGE;;SUPERVISOR;M;R;90;;;P10;Relatório de horas enviado;
+AT-953;Atividade com cargo inexistente;Comercial;—;XYZ;;SUPERVISOR;D;R;30;;;;Produto;
+AT-954;Semanal sem dia da semana;Qualidade;—;TMN;;SUPERVISOR;W;R;60;;;;Produto entregue;
+AT-955;Duração acima do limite;Qualidade;—;TMN;;SUPERVISOR;D;R;900;;;;Produto entregue;
+AT-950;Código repetido no arquivo;Comercial;—;TCO;;SUPERVISOR;D;R;30;;;;Produto entregue;
+AT-956;@SUM(A1) fórmula de teste;Comercial;—;TCO;;SUPERVISOR;D;R;30;;;;Produto entregue;

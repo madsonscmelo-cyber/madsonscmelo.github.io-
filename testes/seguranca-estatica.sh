@@ -45,5 +45,18 @@ if grep -rnE 'DatePicker|datepicker' app/js >/dev/null; then falha "8.6 date pic
 # Exportação protegida contra CSV injection
 grep -q "\^\[=+\\\\-@\]" app/js/util.js && ok "4.x exportação CSV neutraliza fórmulas (=,+,-,@)" || falha "4.x CSV injection"
 
+# ---------------- Rotina UTD (rotina/) — mesmos critérios ----------------
+echo; echo "== Rotina UTD =="
+if grep -rnE 'service_role|sbp_[A-Za-z0-9]|eyJhbGciOi|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY' rotina >/dev/null; then falha "6.1 possível segredo em rotina/"; else ok "6.1 nenhum segredo no código da rotina"; fi
+if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function\(' rotina/js/*.js >/dev/null; then
+  falha "6.3 sink de XSS na rotina"; grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function\(' rotina/js/*.js
+else ok "6.3 nenhum sink de XSS (innerHTML/eval) na rotina"; fi
+grep -q "Content-Security-Policy" rotina/index.html && ok "1.3 CSP declarada no index.html da rotina (meta)" || falha "1.3 CSP ausente na rotina"
+grep -q "frame-ancestors 'none'" rotina/_headers && ok "1.4 frame-ancestors/X-Frame-Options prontos em rotina/_headers" || falha "1.4 rotina/_headers sem frame-ancestors"
+grep -q "window.top !== window.self" rotina/js/main.js && ok "1.4 proteção anti-iframe na rotina" || falha "1.4 rotina sem proteção anti-iframe"
+grep -q "throw new Error('Configuração de produção ausente" rotina/js/config.js && ok "6.7 rotina: sem config de produção o app não inicia" || falha "6.7 rotina: fallback silencioso para demo"
+grep -q "\^\[=+\\\\-@\]" rotina/js/util.js && ok "4.8 rotina: exportação CSV neutraliza fórmulas" || falha "4.8 rotina: CSV injection"
+if grep -nE "https?://" rotina/index.html rotina/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// " >/dev/null; then falha "rotina: chamada a domínio externo"; grep -nE "https?://" rotina/index.html rotina/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// "; else ok "rotina: nenhum domínio externo (sem CDN, sem fonte, sem API de terceiros)"; fi
+
 echo; [ $FALHAS -eq 0 ] && echo "Resultado: 0 pendências estáticas" || echo "Resultado: $FALHAS pendência(s)"
 exit $FALHAS

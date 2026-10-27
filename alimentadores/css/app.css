@@ -862,3 +862,5 @@ i.mk--chi, i.mk--reinc, i.mk--comp, i.mk--aceso { width: 16px; height: 16px; fon
 .mapa--satelite .cam-arvore { stroke: #5cd65c; }
 .mapa--satelite .cam-acesso { stroke: #ffb74d; }
 .mapa--satelite .cluster { stroke-opacity: .55; }
+.mk--risco { background: #ad1457; }
+i.mk--risco { width: 16px; height: 16px; font-size: 9px; }

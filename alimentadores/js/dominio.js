@@ -23,6 +23,7 @@ export const PARAMS = {
   dicLimiteMesUrbano: 4, // h/mês por UC — sintético, só para estimar compensação quando a base não traz o valor
   dicLimiteMesRural: 8,
   valorHoraUc: 3.2, // R$ por hora de DIC acima do limite, por UC — sintético
+  riscoCritico: 60, // score do poste (0–100) a partir do qual ele é crítico, como na classificação poste a poste
 };
 
 // ---------------- Períodos ----------------
@@ -166,6 +167,7 @@ export function metricas(idx, per) {
     pctVeg: idx.postes.filter((p) => p.veg).length / (idx.postes.length || 1),
     pctAcesso: idx.postes.filter((p) => p.acesso === 'DIFICIL').length / (idx.postes.length || 1),
     chaves: idx.postes.filter((p) => p.chave && p.chave !== 'DJ').length,
+    criticos: idx.postes.filter((p) => (p.risco ?? -1) >= PARAMS.riscoCritico).length,
   };
 }
 
@@ -187,6 +189,7 @@ export const CAMADAS = {
   reinc: { rotulo: 'Reincidente', icone: '🔁', desc: `Poste que originou ${PARAMS.reincidenciaMin} ou mais ocorrências no período` },
   comp: { rotulo: 'Compensação', icone: 'R$', desc: 'Transformador com compensação paga no período' },
   chiAlto: { rotulo: 'CHI alto', icone: '⚡', desc: 'Poste com CHI originado acima do percentil 80 do alimentador' },
+  risco: { rotulo: 'Poste crítico', icone: '⚠', desc: 'Score de risco do poste ≥ 60 (poda, declive, rede velha, material, esforço)' },
   chaves: { rotulo: 'Chaves', icone: '⏚', desc: 'Chaves de manobra e proteção (religador, seccionadora, fusível, NA)' },
 };
 
@@ -197,11 +200,12 @@ export function predicados(stats, limiar) {
     reinc: (p) => st(stats, p.id).n >= PARAMS.reincidenciaMin,
     comp: (p) => st(stats, p.id).comp > 0,
     chiAlto: (p) => st(stats, p.id).chi > 0 && st(stats, p.id).chi >= limiar,
+    risco: (p) => (p.risco ?? -1) >= PARAMS.riscoCritico,
   };
 }
 
 export const CAMADAS_TRECHO = ['arvore', 'acesso']; // marcação contínua de campo: define o trecho
-export const CAMADAS_PONTO = ['reinc', 'comp', 'chiAlto']; // resultado poste a poste: qualifica o trecho
+export const CAMADAS_PONTO = ['reinc', 'comp', 'chiAlto', 'risco']; // resultado poste a poste: qualifica o trecho
 
 /**
  * Filtro das telas: camadas de trecho (árvore, acesso) formam os clusters; camadas de ponto (reincidência, compensação, CHI alto)
@@ -241,7 +245,8 @@ export function clusters(idx, stats, cfg = {}) {
   for (const id of marca) pai.set(id, id);
   for (const id of marca) {
     let p = idx.porId.get(id), passos = 0;
-    while (p?.pai && passos <= salto) {
+    // O trecho não atravessa chave: cada cluster fica dentro de um bloco de manobra (unidade de poda e de desligamento).
+    while (p?.pai && passos <= salto && !DIVIDE_BLOCO.has(p.chave)) {
       const q = idx.porId.get(p.pai);
       if (!q) break;
       if (marca.has(q.id)) { unir(id, q.id); break; }
@@ -270,10 +275,11 @@ export function clusters(idx, stats, cfg = {}) {
     const causaPrinc = Object.entries(causas).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
     out.push({ ids, postes: ps, acesos: acesos.map((p) => p.id), n, chi, comp, ucs, km, causas, causaPrinc, montante, centro, al: idx.al, idCluster: `${idx.al.id}-${montante.id}`,
       veg: ps.filter((p) => p.veg).length / ps.length, acesso: ps.filter((p) => p.acesso === 'DIFICIL').length / ps.length,
-      reinc: ps.filter((p) => st(stats, p.id).n >= PARAMS.reincidenciaMin).length });
+      reinc: ps.filter((p) => st(stats, p.id).n >= PARAMS.reincidenciaMin).length,
+      criticos: ps.filter((p) => (p.risco ?? -1) >= PARAMS.riscoCritico).length });
   }
   return out.filter((c) => c.ids.length >= PARAMS.clusterMinPostes || c.chi > 0 || c.comp > 0)
-    .sort((a, b) => b.chi - a.chi || b.comp - a.comp || b.ids.length - a.ids.length);
+    .sort((a, b) => b.chi - a.chi || b.comp - a.comp || b.criticos - a.criticos || b.ids.length - a.ids.length);
 }
 
 /** Ação recomendada a partir do perfil do cluster (o que mais pesa no CHI e no trecho). */
@@ -281,11 +287,15 @@ export function acaoSugerida(c) {
   if (c.veg >= 0.5 && (c.causaPrinc === 'VEG' || !c.causaPrinc)) return { tipo: 'PODA', texto: c.acesso >= 0.5 ? 'Poda com logística de acesso (roçada do caminho, autorização do proprietário, equipe leve)' : 'Poda programada no trecho (priorizar antes do período chuvoso)' };
   if (c.acesso >= 0.5) return { tipo: 'ACESSO', texto: 'Reduzir tempo de deslocamento: chave telecomandada ou religador no início do trecho, base avançada e rota de acesso mapeada' };
   if (c.comp > 0 && c.n >= PARAMS.reincidenciaMin) return { tipo: 'TRAFO', texto: 'Transformador reincidente com compensação: inspeção termográfica, balanceamento de carga ou troca' };
+  if (c.criticos && !c.n) return { tipo: 'MANUTENCAO', texto: `${c.criticos} poste(s) com score ≥ ${PARAMS.riscoCritico}: inspeção e substituição preventiva (material frágil, esforço baixo, rede velha)` };
   if (c.causaPrinc === 'DESC') return { tipo: 'PROTECAO', texto: 'Descarga atmosférica recorrente: para-raios e aterramento no trecho' };
   if (c.causaPrinc === 'EQUIP') return { tipo: 'MANUTENCAO', texto: 'Falha de equipamento recorrente: inspeção detalhada e substituição preventiva' };
   if (c.causaPrinc === 'ANIMAL') return { tipo: 'PROTECAO', texto: 'Animal: protetores de bucha e cobertura de partes vivas' };
   return { tipo: 'ANALISE', texto: 'Analisar causa raiz (MASP) antes de definir a ação' };
 }
+/** Pergunta efetiva para a base carregada: sem ocorrências, usa a versão por risco físico (quando existe). */
+export const perguntaEfetiva = (q, rede) => (q && q.semOcorrencias && !rede.ocorrencias.length ? { ...q, ...q.semOcorrencias } : q);
+
 export const TIPOS_ACAO = { PODA: 'Poda', ACESSO: 'Acesso / chave', TRAFO: 'Transformador', PROTECAO: 'Proteção', MANUTENCAO: 'Manutenção', ANALISE: 'Análise de causa', CHAVE: 'Nova chave' };
 
 // ---------------- Blocos de manobra ----------------
@@ -306,20 +316,21 @@ export function blocos(idx, stats, per) {
       for (const f of idx.filhos.get(id)) if (!ehCabeca.has(f)) pilha.push(f);
     }
     const set = new Set(membros);
-    let chi = 0, n = 0, ucs = 0, dif = 0, veg = 0, km = 0, temNA = false;
+    let chi = 0, n = 0, ucs = 0, dif = 0, veg = 0, km = 0, temNA = false, criticos = 0;
     for (const id of membros) {
       const p = idx.porId.get(id), s = st(stats, id);
       chi += s.chi; n += s.n; ucs += p.ucs || 0;
       if (p.acesso === 'DIFICIL') dif++;
       if (p.veg) veg++;
       if (p.chave === 'NA') temNA = true;
+      if ((p.risco ?? -1) >= PARAMS.riscoCritico) criticos++;
       if (p.pai && set.has(p.pai)) km += distM(p, idx.porId.get(p.pai)) / 1000;
     }
     const cabP = idx.porId.get(cab);
-    lista.push({ cabeca: cabP, membros, n, chi, ucs, ucsJusante: idx.ucsSub.get(cab), km, temNA,
+    lista.push({ cabeca: cabP, membros, n, chi, ucs, ucsJusante: idx.ucsSub.get(cab), km, temNA, criticos,
       pctAcesso: dif / membros.length, pctVeg: veg / membros.length, sugestao: sugerirChave(idx, membros, cab, per) });
   }
-  return lista.sort((a, b) => b.chi - a.chi);
+  return lista.sort((a, b) => b.chi - a.chi || b.criticos - a.criticos || b.km - a.km);
 }
 
 /**
@@ -349,13 +360,17 @@ export function sugerirChave(idx, membros, cab, per) {
 // ---------------- Perguntas prontas (filtros salvos que respondem uma decisão) ----------------
 export const PERGUNTAS = [
   { id: 'podar', texto: 'Onde podar primeiro?', camadas: ['arvore', 'chiAlto'], modo: 'E', causa: 'VEG', aba: 'clusters',
-    explica: 'Trechos com árvore em que o poste originou CHI alto por vegetação. É a lista de poda com retorno em CHI.' },
+    explica: 'Trechos com árvore em que o poste originou CHI alto por vegetação. É a lista de poda com retorno em CHI.',
+    semOcorrencias: { camadas: ['arvore', 'risco'], modo: 'E', causa: '', explica: 'Base sem ocorrências: trechos com árvore que têm poste crítico (score ≥ 60). Prioriza pelo risco físico; com as ocorrências, passa a priorizar pelo CHI.' } },
   { id: 'acesso', texto: 'Onde o acesso alonga a interrupção?', camadas: ['acesso', 'chiAlto'], modo: 'E', causa: '', aba: 'clusters',
-    explica: 'Trechos de acesso difícil com CHI alto. Ali o CHI vem da duração: a resposta é chave telecomandada, religador ou base avançada, não só manutenção.' },
+    explica: 'Trechos de acesso difícil com CHI alto. Ali o CHI vem da duração: a resposta é chave telecomandada, religador ou base avançada, não só manutenção.',
+    semOcorrencias: { camadas: ['acesso', 'risco'], modo: 'E', causa: '', explica: 'Base sem ocorrências: trechos de acesso difícil (rural, relevo, capoeira alta) com poste crítico. É onde a falha, quando vier, demora mais para ser atendida.' } },
   { id: 'chave', texto: 'Onde falta chave?', camadas: ['chaves'], modo: 'OU', causa: '', aba: 'blocos',
     explica: 'Blocos de manobra ordenados pelo CHI originado, com a posição de chave nova que mais evita CHI.' },
   { id: 'compensacao', texto: 'Onde a compensação se repete?', camadas: ['comp', 'reinc'], modo: 'E', causa: '', aba: 'clusters',
     explica: 'Transformadores que pagaram compensação e são reincidentes. É dinheiro que volta todo mês se nada mudar.' },
+  { id: 'critico', texto: 'Onde estão os postes críticos?', camadas: ['risco'], modo: 'OU', causa: '', aba: 'clusters',
+    explica: `Postes com score de risco ≥ ${PARAMS.riscoCritico} (poda, declive, rede velha, material, esforço), agrupados em trechos. Não depende de ocorrência: é risco físico.` },
   { id: 'reincidente', texto: 'Quem é reincidente?', camadas: ['reinc'], modo: 'OU', causa: '', aba: 'clusters',
     explica: `Postes que originaram ${PARAMS.reincidenciaMin} ou mais ocorrências no período, agrupados em trechos.` },
 ];

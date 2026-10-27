@@ -133,8 +133,14 @@ function desenhar(r) {
     }
   }
   if (ativas.has('chaves')) {
+    // Base real tem centenas de fusíveis por alimentador: acima de 150 chaves, CF vira ponto (canvas) e só RL/DJ/CS/NA levam rótulo.
+    const muitas = idx.postes.filter((p) => p.chave).length > 150;
     for (const p of idx.postes) {
       if (!p.chave) continue;
+      if (muitas && p.chave === 'CF') {
+        L.circleMarker([p.lat, p.lon], { renderer, radius: 4, color: '#ffffff', fillColor: '#4f5b75', weight: 1.5, fillOpacity: 1 }).on('click', () => tocarPoste(p.id)).addTo(grupoPontos);
+        continue;
+      }
       const m = L.marker([p.lat, p.lon], { keyboard: true, title: `${CHAVES[p.chave]} no poste ${codPoste(p)}`, zIndexOffset: 1000,
         icon: L.divIcon({ html: el('span', { class: `mk-chave mk-chave--${p.chave.toLowerCase()}`, text: p.chave }), className: 'mk-wrap', iconSize: [30, 22] }) });
       m.on('click', () => tocarPoste(p.id));
@@ -395,6 +401,7 @@ function abaClusters(lista, ativo, idx, per) {
 
 /** Árvore de manobra: blocos entre chaves, indentados pela hierarquia (DJ → RL/CS → CF), com CHI originado e chave sugerida. */
 function abaBlocos(idx, lista) {
+  if (!idx.postes.some((p) => p.pai)) return el('p', { class: 'vazio', text: `O ${idx.al.id} não tem topologia nesta base (poste a montante vazio). As chaves aparecem no mapa (camada Chaves), mas os blocos de manobra e a chave sugerida precisam saber quem está a montante de quem.` });
   const tocar = (id) => { verPoste(idx.porId.get(id)); tocarPoste(id); };
   const blocoDe = new Map();
   lista.forEach((b) => b.membros.forEach((m) => blocoDe.set(m, b)));

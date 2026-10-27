@@ -151,7 +151,13 @@ export function montarBase({ postes: txtPostes, ocorrencias: txtOc = '', compens
     rel.aceitas++;
   }
   // Topologia: pai referenciado pelo código do poste dentro do mesmo alimentador.
-  for (const [al, n] of semPai) {
+  // Sem a coluna poste_pai: liga na ordem do arquivo. Com a coluna presente e vazia (camada só de pontos, ex.: chaves do SIG),
+  // não inventa ligação: os pontos ficam soltos e o app avisa que não há topologia.
+  if (mp.pai !== undefined && semPai.size) {
+    const soltos = [...semPai.values()].reduce((a, b) => a + b, 0);
+    if (soltos === postes.length) rel.avisos.push('Base sem topologia (poste_pai vazio): os pontos aparecem no mapa, mas trechos contínuos e árvore de manobra precisam do poste a montante.');
+  }
+  for (const [al, n] of mp.pai === undefined ? semPai : []) {
     const doAl = postes.filter((p) => p.al === al);
     if (n === doAl.length && doAl.length > 1) {
       rel.avisos.push(`${al}: sem coluna poste_pai. Os postes foram ligados na ordem do arquivo; revise se o arquivo não estiver ordenado pelo caminho da rede.`);
@@ -175,7 +181,8 @@ export function montarBase({ postes: txtPostes, ocorrencias: txtOc = '', compens
   }
   if (paiInexistente) rel.avisos.push(`${paiInexistente} poste(s) apontam para um poste pai que não está no arquivo: viraram início de trecho.`);
   if (ciclos) rel.avisos.push(`${ciclos} ciclo(s) na ligação poste → pai foram quebrados.`);
-  for (const a of alimentadores.values()) if (!postes.some((p) => p.al === a.id && p.ucs > 0)) rel.avisos.push(`${a.id}: nenhum poste com UCs. DEC/FEC e UCs a jusante ficam zerados; inclua a coluna ucs nos postes com transformador.`);
+  const semUcs = [...alimentadores.values()].filter((a) => !postes.some((p) => p.al === a.id && p.ucs > 0)).map((a) => a.id);
+  if (semUcs.length) rel.avisos.push(`${semUcs.length === alimentadores.size ? 'Nenhum alimentador' : `${semUcs.length} alimentador(es) (${semUcs.slice(0, 5).join(', ')}${semUcs.length > 5 ? '…' : ''})`} com UCs nos postes: DEC/FEC e UCs a jusante ficam zerados. Inclua a coluna ucs nos postes com transformador.`);
 
   // Ocorrências
   const ocorrencias = [];

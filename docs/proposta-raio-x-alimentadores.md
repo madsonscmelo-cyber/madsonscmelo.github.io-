@@ -85,7 +85,7 @@ Ele passou em 29 verificações automatizadas, incluindo acessibilidade WCAG 2.1
 |---|---|
 | CSV importado no aparelho | Carga diária do GIS (topologia e marcação) e do sistema de ocorrências e compensação, em banco com PostGIS |
 | Login local | SSO corporativo (OIDC) com MFA, perfis por conjunto com RLS |
-| Tiles do OpenStreetMap | Tiles próprios (PMTiles) no ambiente corporativo |
+| Fundos públicos: ruas (OSM), satélite (Esri), terreno (OpenTopoMap) | Tiles próprios (PMTiles) ou imagem de satélite licenciada no ambiente corporativo; relevo a partir de MDT próprio |
 | CHI evitado de 1ª ordem | Incluir recomposição por manobra (NA) e validar com a área de proteção |
 | Marcação de árvore e acesso estática | Atualizada pela inspeção do RedeViva (`app/`): o poste inspecionado atualiza a camada |
 

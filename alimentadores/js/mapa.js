@@ -1,20 +1,26 @@
 // Tela Mapa no padrão do RedeViva (app/): o mapa ocupa a tela, os controles flutuam por cima.
 // Esquerda: Perguntas, Filtros, Resultados e Mais (botões redondos). Topo direito: alimentador, camadas rápidas
 // (Árvore | Acesso | Chaves) e a faixa de filtro ligado com "Limpar". Canto: legenda. Resultados e fichas abrem no painel lateral.
-// Leaflet vem do mesmo vendor do RedeViva (../app/vendor/leaflet). O fundo de ruas (OSM) é opcional e só carrega se ligado.
+// Leaflet vem do mesmo vendor do RedeViva (../app/vendor/leaflet). Fundo: ruas (OSM), satélite (Esri), terreno (OpenTopoMap) ou nenhum.
 import { el, $, preencher, fmtNum, csvStringify, baixarArquivo, hojeISO, toast } from './util.js';
 import { estado } from './store.js';
 import { CAMADAS, CAUSAS, CHAVES, PERGUNTAS, TIPOS_ACAO, periodos, indexar, statsPostes, st, metricas, clusters, blocos, filtroPostes, montarFiltro, limiarChiAlto, predicados, acaoSugerida } from './dominio.js';
 import { abrirSheet, sheetAtual, abrirPoste, abrirCluster, fmt1, fmt2, fmtChi, fmtR, codPoste, kpi, delta, barra, item } from './ui.js';
 import { logar } from './auditoria.js';
 
-const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ATRIBUICAO = '© OpenStreetMap';
+// Fundos do mapa. Os provedores recebem só a área vista (coordenadas dos tiles), nunca dados da rede. "Sem fundo" = nada sai do aparelho.
+// Produção: tiles próprios (PMTiles) — ver docs/proposta-raio-x-alimentadores.md §6.
+export const FUNDOS = {
+  ruas: { rotulo: 'Ruas', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', maxZoom: 19 },
+  satelite: { rotulo: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics', maxZoom: 19 },
+  terreno: { rotulo: 'Terreno', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap, SRTM · estilo © OpenTopoMap (CC-BY-SA)', maxZoom: 17, subdomains: 'abc' },
+  nenhum: { rotulo: 'Sem fundo' },
+};
 const ABAS = { clusters: 'Trechos', blocos: 'Árvore de manobra', resumo: 'Resumo' };
 const RAPIDAS = ['arvore', 'acesso', 'chaves']; // camadas de um toque no topo do mapa
 const MAX_MARCADORES = 500; // acima disso os destaques vão para o canvas (desempenho em alimentador grande)
 
-let mapa = null, fundo = null, grupoRede, grupoCamadas, grupoClusters, grupoPontos, grupoMarcas, renderer;
+let mapa = null, fundo = null, fundoAtual = '', grupoRede, grupoCamadas, grupoClusters, grupoPontos, grupoMarcas, renderer;
 let ultimo = null; // resultado do último cálculo (alimenta o painel de resultados e a legenda)
 
 function garantirMapa() {
@@ -33,9 +39,17 @@ function garantirMapa() {
 
 function aplicarFundo() {
   if (!mapa) return;
-  if (estado.sel.fundo && !fundo) fundo = L.tileLayer(URL_TILES, { maxZoom: 19, attribution: ATRIBUICAO, crossOrigin: 'anonymous' }).addTo(mapa);
-  if (!estado.sel.fundo && fundo) { fundo.remove(); fundo = null; }
-  $('#mapa').classList.toggle('mapa--leve', !estado.sel.fundo);
+  const id = FUNDOS[estado.sel.fundo] ? estado.sel.fundo : 'ruas';
+  if (id !== fundoAtual) {
+    if (fundo) { fundo.remove(); fundo = null; }
+    const f = FUNDOS[id];
+    if (f.url) fundo = L.tileLayer(f.url, { maxZoom: f.maxZoom, attribution: f.attribution, subdomains: f.subdomains || 'abc', crossOrigin: 'anonymous' }).addTo(mapa);
+    mapa.setMaxZoom(f.maxZoom || 19);
+    fundoAtual = id;
+  }
+  const c = $('#mapa').classList;
+  c.toggle('mapa--leve', id === 'nenhum');
+  c.toggle('mapa--satelite', id === 'satelite'); // rede e trechos ganham contorno claro sobre a imagem
 }
 
 // Postes vão em canvas (milhares de pontos): canvas não lê classe CSS, então a cor vai na opção. Mesmas cores do RedeViva.
@@ -59,6 +73,7 @@ function segmentos(idx, teste) {
   return out;
 }
 
+export const nivelTrecho = (c, lista) => { const mx = lista[0]?.chi || 0; return !mx || !c.chi ? 'baixo' : c.chi >= mx * 0.5 ? 'alto' : c.chi >= mx * 0.15 ? 'medio' : 'baixo'; };
 const icone = (cls, txt, tam = 24) => L.divIcon({ html: el('span', { class: cls, text: txt }), className: 'mk-wrap', iconSize: [tam, tam] });
 const verCluster = (c) => mapa?.fitBounds(L.latLngBounds(c.postes.map((p) => [p.lat, p.lon])).pad(0.4), { maxZoom: 18 });
 const verPoste = (p) => mapa?.setView([p.lat, p.lon], 18);
@@ -80,8 +95,10 @@ function desenhar(r) {
   lista.slice(0, comPonto ? 15 : 40).forEach((c, i) => {
     const set = new Set(c.ids);
     const segs = c.postes.filter((p) => p.pai && set.has(p.pai)).map((p) => { const q = idx.porId.get(p.pai); return [[q.lat, q.lon], [p.lat, p.lon]]; });
-    if (segs.length) L.polyline(segs, { className: 'cluster', weight: 18, interactive: false }).addTo(grupoClusters);
-    const m = L.marker([c.centro.lat, c.centro.lon], { keyboard: true, title: `Trecho ${i + 1}: CHI ${fmtChi(c.chi)} — abrir`, zIndexOffset: 900, icon: icone('mk-cluster', String(i + 1), 34) });
+    // Cor do trecho = peso no CHI do filtro (alto ≥ 50% do maior, médio ≥ 15%, baixo); o número repete a ordem (cor não é o único sinal).
+    const nivel = nivelTrecho(c, lista);
+    if (segs.length) L.polyline(segs, { className: `cluster cluster--${nivel}`, weight: 18, interactive: true }).on('click', () => abrirCluster(c, i + 1, verCluster, voltarResultados)).addTo(grupoClusters);
+    const m = L.marker([c.centro.lat, c.centro.lon], { keyboard: true, title: `Trecho ${i + 1}: CHI ${fmtChi(c.chi)} — abrir`, zIndexOffset: 900, icon: icone(`mk-cluster mk-cluster--${nivel}`, String(i + 1), 34) });
     m.on('click', () => abrirCluster(c, i + 1, verCluster, voltarResultados));
     if (comPonto) m.addTo(grupoClusters);
   });
@@ -142,12 +159,7 @@ function montarControles() {
   const btn = (ico, rotulo, fn, id) => el('button', { type: 'button', class: 'ctrl', title: rotulo, 'aria-label': rotulo, id, onclick: fn },
     el('span', { text: ico, 'aria-hidden': 'true' }), el('span', { class: 'ctrl__rot', text: rotulo }));
   const mais = el('div', { id: 'mapa-mais', class: 'mapa-mais', hidden: true },
-    btn('🗺️', 'Fundo de ruas', () => {
-      estado.sel.fundo = !estado.sel.fundo;
-      try { localStorage.setItem('raiox-fundo', estado.sel.fundo ? '1' : '0'); } catch { /* sem storage */ }
-      aplicarFundo(); atualizarControles();
-      toast(estado.sel.fundo ? 'Fundo de ruas ligado (tiles do OpenStreetMap).' : 'Fundo de ruas desligado: nada sai do aparelho.');
-    }, 'ctrl-fundo'),
+    el('div', { class: 'segmentado fundos', role: 'group', 'aria-label': 'Fundo do mapa' }, Object.entries(FUNDOS).map(([k, f]) => el('button', { type: 'button', class: 'segmentado__op', dataset: { fundo: k }, text: f.rotulo, onclick: () => trocarFundo(k) }))),
     btn('⬇', 'Exportar trechos', () => { fecharPaineis(); exportarTrechos(); }, 'ctrl-exportar'),
     btn('🎯', 'Enquadrar alimentador', () => { fecharPaineis(); if (ultimo) mapa.fitBounds(L.latLngBounds(ultimo.idx.postes.map((p) => [p.lat, p.lon])).pad(0.05)); }, 'ctrl-enquadrar'));
   preencher($('#mapa-ctrl'),
@@ -158,6 +170,14 @@ function montarControles() {
     mais);
 }
 
+function trocarFundo(k) {
+  estado.sel.fundo = k;
+  try { localStorage.setItem('raiox-fundo', k); } catch { /* sem storage */ }
+  aplicarFundo(); atualizarControles();
+  logar({ categoria: 'NAVEGACAO', acao: 'FUNDO_MAPA', detalhe: { fundo: k } });
+  if (k === 'nenhum') toast('Sem fundo: nada sai do aparelho.');
+}
+
 function atualizarControles() {
   const s = estado.sel;
   const n = s.camadas.filter((c) => !RAPIDAS.includes(c)).length + (s.causa ? 1 : 0) + (s.chiMin ? 1 : 0) + (s.modo === 'E' ? 1 : 0) + (s.periodo !== 'ATUAL' ? 1 : 0);
@@ -166,7 +186,7 @@ function atualizarControles() {
   rot('#ctrl-perguntas', q ? q.texto : 'Perguntas', !!q);
   rot('#ctrl-filtros', n ? `Filtros (${n})` : 'Filtros', n > 0);
   rot('#ctrl-resultados', ultimo ? `Resultados (${ultimo.lista.length})` : 'Resultados', false);
-  rot('#ctrl-fundo', s.fundo ? 'Fundo de ruas: ligado' : 'Fundo de ruas: desligado', s.fundo);
+  document.querySelectorAll('.fundos .segmentado__op').forEach((b) => { const on = b.dataset.fundo === (FUNDOS[s.fundo] ? s.fundo : 'ruas'); b.classList.toggle('ativo', on); b.setAttribute('aria-pressed', String(on)); });
 }
 
 /** Topo direito: alimentador, camadas de um toque e a faixa "Filtro: … · Limpar" (filtro ligado sempre visível). */
@@ -251,7 +271,9 @@ function montarLegenda() {
     el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Rede' }), leg(linha('leg-linha--rede'), 'Rede do alimentador'), leg(mk('mk--ok'), 'Poste'),
       s.has('arvore') ? leg(linha('leg-linha--arvore'), 'Árvore') : null, s.has('acesso') ? leg(linha('leg-linha--acesso'), 'Acesso difícil (tracejado)') : null),
     ultimo?.lista.length ? el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Resultado do filtro' }),
-      leg(el('i', { class: 'mk-cluster mk-cluster--leg', text: '1', 'aria-hidden': 'true' }), 'Trecho (nº = ranking por CHI)'), leg(mk('mk--aceso', '•'), 'Poste que acende no filtro')) : null,
+      leg(el('i', { class: 'mk-cluster mk-cluster--leg mk-cluster--alto', text: '1', 'aria-hidden': 'true' }), 'Trecho: CHI alto'),
+      leg(el('i', { class: 'mk-cluster mk-cluster--leg mk-cluster--medio', text: '2', 'aria-hidden': 'true' }), 'médio'),
+      leg(el('i', { class: 'mk-cluster mk-cluster--leg mk-cluster--baixo', text: '3', 'aria-hidden': 'true' }), 'baixo (nº = ranking)'), leg(mk('mk--aceso', '•'), 'Poste que acende no filtro')) : null,
     s.has('chiAlto') || s.has('reinc') || s.has('comp') ? el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Poste' }),
       s.has('chiAlto') ? leg(mk('mk--chi', '!'), 'CHI alto') : null, s.has('reinc') ? leg(mk('mk--reinc', 'R'), 'Reincidente') : null, s.has('comp') ? leg(mk('mk--comp', '$'), 'Compensação (anel = R$)') : null) : null,
     s.has('chaves') || ultimo?.sugestoes.length ? el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Chaves' }),
@@ -363,7 +385,7 @@ function abaClusters(lista, ativo, idx, per) {
     el('ol', { class: 'trechos' }, lista.slice(0, 60).map((c, i) => {
       const a = acaoSugerida(c);
       return el('li', {}, el('button', { type: 'button', class: 'trecho', onclick: () => { verCluster(c); abrirCluster(c, i + 1, verCluster, voltarResultados); } },
-        el('span', { class: 'trecho__n', text: String(i + 1) }),
+        el('span', { class: `trecho__n mk-cluster--${nivelTrecho(c, lista)}`, text: String(i + 1) }),
         el('span', { class: 'trecho__txt' },
           el('strong', { text: `Poste ${codPoste(c.montante)} · ${c.ids.length} postes · ${fmt1(c.km)} km` }),
           el('span', { class: 'muted pequeno', text: `CHI ${fmtChi(c.chi)} · ${fmtR(c.comp)} · ${c.n} ocorr. · ${CAUSAS[c.causaPrinc] || 'sem falha'}` }),

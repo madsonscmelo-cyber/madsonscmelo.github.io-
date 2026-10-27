@@ -164,7 +164,7 @@ async function iniciar() {
   registrarSw();
   $('#sheet-fechar').addEventListener('click', fecharSheet);
   $('#btn-usuario').addEventListener('click', menuUsuario);
-  try { estado.sel.fundo = localStorage.getItem('raiox-fundo') !== '0'; } catch { /* sem storage */ }
+  try { const f = localStorage.getItem('raiox-fundo'); estado.sel.fundo = f === '0' ? 'nenhum' : ['ruas', 'satelite', 'terreno', 'nenhum'].includes(f) ? f : 'ruas'; } catch { /* sem storage */ }
   let sol = false;
   try { sol = localStorage.getItem('raiox-sol') === '1'; } catch { /* sem storage */ }
   aplicarSol(sol);

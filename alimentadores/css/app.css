@@ -847,3 +847,18 @@ i.mk--chi, i.mk--reinc, i.mk--comp, i.mk--aceso { width: 16px; height: 16px; fon
 .sheet .abas { margin: .4rem 0 .7rem; flex-wrap: wrap; }
 .sheet .kpis--compacto { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 720px) { .filtros-mapa.painel-mapa { max-height: calc(100% - 7rem); } }
+
+/* ---- Trechos coloridos pelo peso no CHI + fundo satélite ---- */
+.cluster--alto { stroke: #c62828; stroke-opacity: .38; }
+.cluster--medio { stroke: #ef8a00; stroke-opacity: .38; }
+.cluster--baixo { stroke: #c9a400; stroke-opacity: .32; }
+.cluster { cursor: pointer; }
+.mk-cluster--alto { background: #c62828; }
+.mk-cluster--medio { background: #b35c00; }
+.mk-cluster--baixo { background: #6b5800; }
+.fundos { margin: 0 0 .2rem; flex-wrap: wrap; background: var(--superficie); box-shadow: var(--sombra); border-radius: 12px; }
+.fundos .segmentado__op { flex: 1 1 45%; }
+.mapa--satelite .rede { stroke: #ffffff; stroke-opacity: .9; }
+.mapa--satelite .cam-arvore { stroke: #5cd65c; }
+.mapa--satelite .cam-acesso { stroke: #ffb74d; }
+.mapa--satelite .cluster { stroke-opacity: .55; }

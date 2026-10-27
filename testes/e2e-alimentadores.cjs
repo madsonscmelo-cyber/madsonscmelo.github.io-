@@ -55,7 +55,7 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
   const acoesLog = (p) => mod(p, async () => { const { todosLogs } = await import('./js/auditoria.js'); return (await todosLogs()).map((r) => ({ acao: r.acao, resultado: r.resultado, detalhe: r.detalhe })); });
   try {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 860 }, serviceWorkers: 'block', acceptDownloads: true });
-    await ctx.route(/tile\.openstreetmap\.org/, (r) => r.abort()); // fundo de ruas não é necessário no teste
+    await ctx.route(/tile\.openstreetmap\.org|arcgisonline\.com|opentopomap\.org/, (r) => r.abort()); // fundo de ruas não é necessário no teste
     const p = await ctx.newPage();
     vigiar(p);
     await p.goto(BASE);
@@ -139,6 +139,25 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     });
     registrar('F9', 'Filtro E/OU: árvore E acesso = interseção; OU = união', eou.ou === eou.arv + eou.ac - eou.e && eou.e <= Math.min(eou.arv, eou.ac), `E=${eou.e}, OU=${eou.ou}, árvore=${eou.arv}, acesso=${eou.ac}`);
 
+    // Fundo do mapa e trechos coloridos pelo CHI
+    await perguntar(p, 'Onde podar primeiro?');
+    await p.click('#sheet-fechar');
+    const niveis = await p.locator('#mapa path.cluster--alto').count();
+    const pedidos = [];
+    p.on('request', (r) => pedidos.push(r.url()));
+    await p.click('#ctrl-mais');
+    await p.click('.fundos [data-fundo="satelite"]'); await p.waitForTimeout(400);
+    const sat = pedidos.some((u) => u.includes('arcgisonline.com')) && await p.locator('#mapa.mapa--satelite').count();
+    await p.click('.fundos [data-fundo="terreno"]'); await p.waitForTimeout(400);
+    const ter = pedidos.some((u) => u.includes('opentopomap.org'));
+    pedidos.length = 0;
+    await p.click('.fundos [data-fundo="nenhum"]'); await p.waitForTimeout(400);
+    await p.mouse.move(700, 450); await p.mouse.wheel(0, -400); await p.waitForTimeout(400);
+    const semFundo = !pedidos.some((u) => /openstreetmap|arcgisonline|opentopomap/.test(u)) && await p.locator('#mapa.mapa--leve').count();
+    await p.click('.fundos [data-fundo="ruas"]');
+    await p.click('#ctrl-mais');
+    registrar('F12', 'Fundo do mapa: satélite e terreno carregam; "Sem fundo" não busca nada fora; trecho de maior CHI em vermelho', !!sat && ter && !!semFundo && niveis >= 1, `satélite=${!!sat}, terreno=${ter}, sem fundo sem rede=${!!semFundo}, trechos CHI alto=${niveis}`);
+
     // ================= Onde agir =================
     await irPara(p, 'prioridades');
     const nPrior = await p.locator('#view-prioridades tbody tr').count();
@@ -165,7 +184,7 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     registrar('F11', 'Importa os modelos CSV (postes, ocorrências, compensações) e troca a base', base.origem === 'IMPORTADA' && base.al.join() === 'ALM-90' && base.postes === 5 && base.oc === 2 && base.comp === 4, JSON.stringify(base));
     const logImp = (await acoesLog(p)).filter((r) => r.acao === 'BASE_IMPORTADA').at(-1);
     registrar('9.x', 'Log da importação guarda só contagens (nunca o conteúdo da base)', logImp && !JSON.stringify(logImp.detalhe).includes('P-00') && logImp.detalhe.postes === 5, JSON.stringify(logImp?.detalhe));
-    registrar('9.y', 'Nenhum dado enviado para fora (só o servidor local e, se ligado, tiles do mapa)', !externos.filter((h) => h !== 'tile.openstreetmap.org').length, [...new Set(externos)].join(', ') || 'nenhum domínio externo');
+    registrar('9.y', 'Nenhum dado enviado para fora (só o servidor local e os tiles do fundo escolhido)', !externos.filter((h) => !/^(tile\.openstreetmap\.org|server\.arcgisonline\.com|[abc]\.tile\.opentopomap\.org)$/.test(h)).length, [...new Set(externos)].join(', ') || 'nenhum domínio externo');
 
     // Validação linha a linha + XSS + CSV injection
     const ruim = 'alimentador;poste;poste_pai;latitude;longitude;chave;nome_alimentador;ucs\n'
@@ -223,13 +242,13 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     await fr.setContent(`<iframe src="${BASE}" width="400" height="300"></iframe>`);
     await fr.waitForTimeout(1500);
     const dentro = await fr.frames()[1]?.evaluate(() => document.body.textContent).catch(() => '');
-    const externosCsp = (html.match(/https?:\/\/[^\s;"]+/g) || []).filter((u) => !u.includes('tile.openstreetmap.org'));
-    registrar('1.3/1.4', 'CSP só libera o próprio site e os tiles do OSM; recusa abrir dentro de iframe', /Content-Security-Policy/.test(html) && !externosCsp.length && /não pode ser aberto dentro de outra página/.test(dentro || ''), `iframe: "${(dentro || '').trim().slice(0, 60)}"`);
+    const externosCsp = (html.match(/https?:\/\/[^\s;"]+/g) || []).filter((u) => !/tile\.openstreetmap\.org|server\.arcgisonline\.com|tile\.opentopomap\.org/.test(u));
+    registrar('1.3/1.4', 'CSP só libera o próprio site e os fundos de mapa; recusa abrir dentro de iframe', /Content-Security-Policy/.test(html) && !externosCsp.length && /não pode ser aberto dentro de outra página/.test(dentro || ''), `iframe: "${(dentro || '').trim().slice(0, 60)}"`);
     await ctx.close();
 
     // ================= Celular 360 px, alvos de toque e acessibilidade =================
     const cm = await browser.newContext({ viewport: { width: 360, height: 760 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
-    await cm.route(/tile\.openstreetmap\.org/, (r) => r.abort());
+    await cm.route(/tile\.openstreetmap\.org|arcgisonline\.com|opentopomap\.org/, (r) => r.abort());
     const m = await cm.newPage();
     vigiar(m);
     await m.goto(BASE);

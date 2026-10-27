@@ -39,7 +39,7 @@ export const estado = {
   usuario: null,
   offlineSimulado: false,
   // Seleção corrente (vale entre telas): alimentador, período e filtro.
-  sel: { al: '', periodo: 'ATUAL', camadas: [], modo: 'OU', causa: '', chiMin: 0, aba: 'resumo', fundo: true },
+  sel: { al: '', periodo: 'ATUAL', camadas: [], modo: 'OU', causa: '', chiMin: 0, aba: 'resumo', fundo: 'ruas' },
 };
 
 export const eventos = new EventTarget();

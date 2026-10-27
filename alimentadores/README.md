@@ -36,7 +36,7 @@ Senha inicial de todos os usuários: `Rede@Raiox2026`. O app obriga a criar uma 
 | Tela | Para que serve |
 |---|---|
 | **Alimentadores** | DEC, FEC, CHI e compensação do ano até hoje contra o mesmo período do ano anterior. Matriz CHI × compensação: o quadrante de cima à direita é a prioridade 1. Ranking com % de postes com árvore e com acesso difícil e chaves/km. Exporta CSV |
-| **Mapa** | Mesmo layout do RedeViva: mapa em tela cheia. À esquerda ficam os botões redondos **Perguntas**, **Filtros**, **Resultados** e **Mais** (fundo de ruas, exportar, enquadrar). No topo direito estão o alimentador, as camadas de um toque **Árvore \| Acesso \| Chaves** e a faixa "Filtro: … · Limpar". A legenda fica no canto. Filtros: todas as camadas (inclusive reincidente, compensação e CHI alto), E/OU, período, causa e CHI mínimo. Resultados abre no painel lateral com **Trechos** (numerados no mapa), **Árvore de manobra** (blocos DJ → RL/CS → CF, com ★ chave sugerida) e **Resumo**. Tocar no poste ou no trecho abre a ficha, com "← Resultados" para voltar à lista |
+| **Mapa** | Mesmo layout do RedeViva: mapa em tela cheia. À esquerda ficam os botões redondos **Perguntas**, **Filtros**, **Resultados** e **Mais** (fundo do mapa: Ruas, Satélite, Terreno ou Sem fundo; exportar; enquadrar). No topo direito estão o alimentador, as camadas de um toque **Árvore \| Acesso \| Chaves** e a faixa "Filtro: … · Limpar". A legenda fica no canto. Filtros: todas as camadas (inclusive reincidente, compensação e CHI alto), E/OU, período, causa e CHI mínimo. Resultados abre no painel lateral com **Trechos** (no mapa, cada trecho é colorido pelo peso no CHI: vermelho ≥ 50% do maior, laranja ≥ 15%, amarelo abaixo; o número é o ranking), **Árvore de manobra** (blocos DJ → RL/CS → CF, com ★ chave sugerida) e **Resumo**. Tocar no poste ou no trecho abre a ficha, com "← Resultados" para voltar à lista |
 | **Onde agir** | Aplica a mesma pergunta a todos os alimentadores e gera uma lista única por CHI ou compensação, com o Pareto do top 10. "Ver no mapa" abre o trecho. Exporta a carteira de ações |
 | **Dados** | Mostra a base carregada (sintética ou importada), importa com relatório linha a linha, apaga a base importada e lista os parâmetros dos cálculos |
 | **Acesso** | Usuários, logs com verificação de integridade e política (mesmo módulo dos outros apps) |
@@ -77,8 +77,8 @@ Regras de validação:
 | Login, sessão, log | Iguais aos outros apps: PBKDF2-SHA-256 com 210 mil iterações, bloqueio após 5 erros, sessão de 20 min sem uso e 10 h no máximo, log só de inclusão e encadeado |
 | Permissões | Importar e apagar base é só gerência e planejamento. A checagem é feita no comando (`importar()`), não só no botão, e a negação vai para o log |
 | XSS e CSV injection | Nenhum `innerHTML`. Texto vindo do CSV aparece literal. A exportação prefixa `= + - @` |
-| CSP | `default-src 'self'`. A única origem externa é `tile.openstreetmap.org`, para o fundo de ruas. O fundo pode ser desligado, e então nada sai do aparelho |
-| Fundo de ruas | Ao buscar os tiles, o OSM recebe a área do mapa sendo vista, mas não recebe dados da rede. Para base sensível, desligue o fundo ou, na Fase 1, use tiles próprios |
+| CSP | `default-src 'self'`. Origens externas só para o fundo do mapa: `tile.openstreetmap.org` (ruas), `server.arcgisonline.com` (satélite Esri) e `*.tile.opentopomap.org` (terreno). Em "Sem fundo", nada sai do aparelho |
+| Fundo do mapa | O provedor do fundo recebe a área vista (tiles), não dados da rede. Satélite (Esri) e terreno (OpenTopoMap) são serviços públicos com limite de uso e atribuição: servem para o protótipo. Em produção, use tiles próprios ou licenciados. Para base sensível, use "Sem fundo" |
 | Limite honesto | O endereço do GitHub Pages é público e o login é local: ele protege o aparelho, não substitui SSO. A base real só deve ser carregada em aparelho corporativo e apagada ao terminar |
 
 ## Testes
@@ -88,7 +88,7 @@ bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e:alimentadores
 ```
 
-Resultado atual: **30/30** verificações ponta a ponta e 0 pendências estáticas. A bateria cobre:
+Resultado atual: **31/31** verificações ponta a ponta e 0 pendências estáticas. A bateria cobre:
 
 - camadas e foco preservado;
 - perguntas prontas;

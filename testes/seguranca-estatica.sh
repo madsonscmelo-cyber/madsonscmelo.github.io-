@@ -72,5 +72,20 @@ grep -q "\^\[=+\\\\-@\]" demandas/js/util.js && ok "4.8 demandas: exportação C
 grep -q "LADO_MAX = 1280" demandas/js/nova.js && ok "8.5 demandas: imagem anexada reduzida a ≤1280 px e regravada sem EXIF" || falha "8.5 demandas: imagem sem compressão"
 if grep -nE "https?://" demandas/index.html demandas/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// " >/dev/null; then falha "demandas: chamada a domínio externo"; grep -nE "https?://" demandas/index.html demandas/js/*.js | grep -vE "w3.org/2000/svg|exemplo|// "; else ok "demandas: nenhum domínio externo (sem CDN, sem fonte, sem API de terceiros)"; fi
 
+# ---------------- Raio-X de Alimentadores (alimentadores/) — mesmos critérios ----------------
+echo; echo "== Raio-X de Alimentadores =="
+if grep -rnE 'service_role|sbp_[A-Za-z0-9]|eyJhbGciOi|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY' alimentadores >/dev/null; then falha "6.1 possível segredo em alimentadores/"; else ok "6.1 nenhum segredo no código do raio-x"; fi
+if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function\(' alimentadores/js/*.js >/dev/null; then
+  falha "6.3 sink de XSS no raio-x"; grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function\(' alimentadores/js/*.js
+else ok "6.3 nenhum sink de XSS (innerHTML/eval) no raio-x"; fi
+grep -q "Content-Security-Policy" alimentadores/index.html && ok "1.3 CSP declarada no index.html do raio-x (meta)" || falha "1.3 CSP ausente no raio-x"
+grep -q "frame-ancestors 'none'" alimentadores/_headers && ok "1.4 frame-ancestors/X-Frame-Options prontos em alimentadores/_headers" || falha "1.4 alimentadores/_headers sem frame-ancestors"
+grep -q "window.top !== window.self" alimentadores/js/main.js && ok "1.4 proteção anti-iframe no raio-x" || falha "1.4 raio-x sem proteção anti-iframe"
+grep -q "throw new Error('Configuração de produção ausente" alimentadores/js/config.js && ok "6.7 raio-x: sem config de produção o app não inicia" || falha "6.7 raio-x: fallback silencioso para demo"
+grep -q "\^\[=+\\\\-@\]" alimentadores/js/util.js && ok "4.8 raio-x: exportação CSV neutraliza fórmulas" || falha "4.8 raio-x: CSV injection"
+if grep -nE "https?://" alimentadores/index.html alimentadores/js/*.js | grep -vE "w3.org/2000/svg|tile\.openstreetmap\.org|exemplo|// " >/dev/null; then falha "raio-x: chamada a domínio externo além dos tiles do OSM"; grep -nE "https?://" alimentadores/index.html alimentadores/js/*.js | grep -vE "w3.org/2000/svg|tile\.openstreetmap\.org|exemplo|// "; else ok "raio-x: nenhum domínio externo além dos tiles do OSM (sem CDN, sem fonte, sem API de terceiros)"; fi
+if grep -nE "fetch\(|XMLHttpRequest|sendBeacon|WebSocket" alimentadores/js/*.js >/dev/null; then falha "raio-x: código que envia dados pela rede"; grep -nE "fetch\(|XMLHttpRequest|sendBeacon|WebSocket" alimentadores/js/*.js; else ok "raio-x: nenhum envio de dados pela rede (a base importada fica no aparelho)"; fi
+if git ls-files alimentadores | grep -E '\.csv$' | grep -v '^alimentadores/modelos/' >/dev/null; then falha "raio-x: CSV versionado fora de modelos/ (base real no repositório?)"; else ok "raio-x: nenhum CSV de base versionado fora de modelos/"; fi
+
 echo; [ $FALHAS -eq 0 ] && echo "Resultado: 0 pendências estáticas" || echo "Resultado: $FALHAS pendência(s)"
 exit $FALHAS

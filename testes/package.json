@@ -1,11 +1,12 @@
 {
   "name": "redeviva-testes",
   "private": true,
-  "description": "Testes de usabilidade, segurança e ponta a ponta dos protótipos RedeViva, Rotina UTD e Central de Demandas",
+  "description": "Testes de usabilidade, segurança e ponta a ponta dos protótipos RedeViva, Rotina UTD, Central de Demandas e Raio-X de Alimentadores",
   "scripts": {
     "e2e": "node e2e.cjs",
     "e2e:rotina": "node e2e-rotina.cjs",
     "e2e:demandas": "node e2e-demandas.cjs",
+    "e2e:alimentadores": "node e2e-alimentadores.cjs",
     "seguranca": "bash seguranca-estatica.sh",
     "headers": "bash headers.sh"
   },

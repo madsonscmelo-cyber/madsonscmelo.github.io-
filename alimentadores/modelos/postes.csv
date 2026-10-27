@@ -1,0 +1,6 @@
+alimentador;conjunto;nome_alimentador;poste;poste_pai;latitude;longitude;arvore;acesso;acesso_motivo;chave;trafo;ucs;comp_2025;comp_2026
+ALM-90;CJ Exemplo;Alimentador de exemplo;P-001;;-15,8000;-48,0800;N;N;;DJ;;;;
+ALM-90;CJ Exemplo;Alimentador de exemplo;P-002;P-001;-15,8004;-48,0796;N;N;;;TR-001;45;1200,50;
+ALM-90;CJ Exemplo;Alimentador de exemplo;P-003;P-002;-15,8008;-48,0792;S;N;;RL;;;;
+ALM-90;CJ Exemplo;Alimentador de exemplo;P-004;P-003;-15,8012;-48,0788;S;S;Sem estrada (trilha);;TR-002;12;;830,00
+ALM-90;CJ Exemplo;Alimentador de exemplo;P-005;P-003;-15,8010;-48,0798;N;S;Propriedade fechada;CF;;;;

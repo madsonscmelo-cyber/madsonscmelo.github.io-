@@ -1,11 +1,11 @@
-# Baseline de segurança dos apps RedeViva (app/), Rotina UTD (rotina/) e Central de Demandas (demandas/). Roda em todo push/PR que toca um deles.
-name: Segurança — apps RedeViva, Rotina UTD e Central de Demandas
+# Baseline de segurança dos apps RedeViva (app/), Rotina UTD (rotina/), Central de Demandas (demandas/) e Raio-X de Alimentadores (alimentadores/). Roda em todo push/PR que toca um deles.
+name: Segurança — apps RedeViva, Rotina UTD, Central de Demandas e Raio-X de Alimentadores
 
 on:
   push:
-    paths: ['app/**', 'rotina/**', 'demandas/**', '.github/workflows/seguranca-app.yml']
+    paths: ['app/**', 'rotina/**', 'demandas/**', 'alimentadores/**', '.github/workflows/seguranca-app.yml']
   pull_request:
-    paths: ['app/**', 'rotina/**', 'demandas/**', '.github/workflows/seguranca-app.yml']
+    paths: ['app/**', 'rotina/**', 'demandas/**', 'alimentadores/**', '.github/workflows/seguranca-app.yml']
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
       - run: >
           semgrep scan --error --metrics=off
           --config p/javascript --config p/owasp-top-ten --config p/secrets
-          --exclude app/vendor app/ rotina/ demandas/
+          --exclude app/vendor app/ rotina/ demandas/ alimentadores/
 
   sintaxe-e-csp:
     name: Sintaxe dos módulos e política de CSP
@@ -43,11 +43,11 @@ jobs:
         with:
           node-version: 22
       - name: Checagem de sintaxe dos módulos
-        run: for f in app/js/*.js rotina/js/*.js demandas/js/*.js; do node --check --input-type=module < "$f" || exit 1; done
+        run: for f in app/js/*.js rotina/js/*.js demandas/js/*.js alimentadores/js/*.js; do node --check --input-type=module < "$f" || exit 1; done
       - name: Proíbe innerHTML/eval/style inline no código do app
         run: |
-          if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function\(|style="' app/js/*.js app/index.html rotina/js/*.js rotina/index.html demandas/js/*.js demandas/index.html; then
+          if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function\(|style="' app/js/*.js app/index.html rotina/js/*.js rotina/index.html demandas/js/*.js demandas/index.html alimentadores/js/*.js alimentadores/index.html; then
             echo "Padrão inseguro encontrado (ver acima)."; exit 1
           fi
       - name: CSP presente no index.html
-        run: grep -q 'Content-Security-Policy' app/index.html && grep -q 'Content-Security-Policy' rotina/index.html && grep -q 'Content-Security-Policy' demandas/index.html
+        run: grep -q 'Content-Security-Policy' app/index.html && grep -q 'Content-Security-Policy' rotina/index.html && grep -q 'Content-Security-Policy' demandas/index.html && grep -q 'Content-Security-Policy' alimentadores/index.html

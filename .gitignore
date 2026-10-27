@@ -1,2 +1,6 @@
 testes/saida/
 testes/node_modules/
+
+# Base real da rede nunca vai para o repositório (público). Só os modelos de exemplo.
+alimentadores/**/*.csv
+!alimentadores/modelos/*.csv

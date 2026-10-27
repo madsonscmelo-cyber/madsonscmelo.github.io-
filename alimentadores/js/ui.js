@@ -70,7 +70,14 @@ export function etiquetas(p, s) {
 }
 
 // ---------------- Fichas ----------------
-export function abrirPoste(alId, posteId, aoVerNoMapa) {
+/** Rodapé fixo da ficha (Fitts): voltar para a lista de resultados + ação principal. */
+function rodape(aoVoltar, principal) {
+  if (!aoVoltar && !principal) return null;
+  return el('div', { class: 'rodape-acoes' },
+    aoVoltar ? el('button', { type: 'button', class: 'btn btn--sec', text: '← Resultados', onclick: aoVoltar }) : null,
+    principal ? el('button', { type: 'button', class: 'btn btn--largo', text: principal[0], onclick: principal[1] }) : null);
+}
+export function abrirPoste(alId, posteId, aoVerNoMapa, aoVoltar) {
   const idx = indexar(estado.rede, alId);
   const p = idx?.porId.get(posteId);
   if (!p) return;
@@ -91,10 +98,10 @@ export function abrirPoste(alId, posteId, aoVerNoMapa) {
       el('strong', { text: `${o.data.slice(8, 10)}/${o.data.slice(5, 7)}/${o.data.slice(0, 4)} ${o.data.slice(11, 16)}` }),
       el('span', { text: ` · ${CAUSAS[o.causa] || o.causa} · ${fmtNum(o.ucs)} UCs · ${fmt2(o.dur)} h · CHI ${fmtChi(o.chi)}` })))) : el('p', { class: 'vazio', text: 'Nenhuma ocorrência originada neste poste no período.' })),
   { tipo: 'poste', al: alId, id: posteId },
-  aoVerNoMapa ? el('button', { type: 'button', class: 'btn btn--largo', text: 'Centralizar no mapa', onclick: () => aoVerNoMapa(p) }) : null);
+  rodape(aoVoltar, aoVerNoMapa ? ['Centralizar no mapa', () => aoVerNoMapa(p)] : null));
 }
 
-export function abrirCluster(c, rank, aoVerNoMapa) {
+export function abrirCluster(c, rank, aoVerNoMapa, aoVoltar) {
   const acao = acaoSugerida(c);
   const causas = Object.entries(c.causas).sort((a, b) => b[1] - a[1]);
   const totalCausas = causas.reduce((s, [, v]) => s + v, 0) || 1;
@@ -110,5 +117,5 @@ export function abrirCluster(c, rank, aoVerNoMapa) {
     causas.length ? el('div', {}, el('h3', { text: 'CHI por causa' }), el('div', { class: 'barras' }, causas.map(([k, v]) => el('div', { class: 'barras__linha' },
       el('span', { text: CAUSAS[k] || k }), barra(v / totalCausas, k === 'VEG' ? 'ok' : 'alerta'), el('span', { class: 'barras__val', text: `${Math.round((v / totalCausas) * 100)}%` }))))) : null),
   { tipo: 'cluster', id: c.idCluster },
-  aoVerNoMapa ? el('button', { type: 'button', class: 'btn btn--largo', text: 'Ver trecho no mapa', onclick: () => aoVerNoMapa(c) }) : null);
+  rodape(aoVoltar, aoVerNoMapa ? ['Ver trecho no mapa', () => aoVerNoMapa(c)] : null));
 }

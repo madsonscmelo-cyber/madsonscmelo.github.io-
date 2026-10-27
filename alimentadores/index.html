@@ -6,7 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://tile.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#1d4ea8">
+  <meta name="theme-color" content="#0b5d3b">
   <title>Raio-X de Alimentadores</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -30,7 +30,14 @@
 
   <main class="principal">
     <section id="view-carteira" class="view tela" hidden></section>
-    <section id="view-mapa" class="view view--mapa" hidden></section>
+    <section id="view-mapa" class="view view--mapa" hidden>
+      <div id="mapa" role="region" aria-label="Mapa do alimentador. As mesmas informações estão em Resultados."></div>
+      <div id="mapa-ctrl" class="mapa-ctrl"></div>
+      <div id="mapa-topo" class="mapa-topo"></div>
+      <div id="painel-perguntas" class="flutuante filtros-mapa painel-mapa" hidden></div>
+      <div id="painel-filtros" class="flutuante filtros-mapa painel-mapa" hidden></div>
+      <details id="legenda" class="legenda"><summary>Legenda</summary></details>
+    </section>
     <section id="view-prioridades" class="view tela" hidden></section>
     <section id="view-dados" class="view tela" hidden></section>
     <section id="view-acesso" class="view tela" hidden></section>

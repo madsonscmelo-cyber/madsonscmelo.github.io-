@@ -36,7 +36,7 @@ Senha inicial de todos os usuários: `Rede@Raiox2026`. O app obriga a criar uma 
 | Tela | Para que serve |
 |---|---|
 | **Alimentadores** | DEC, FEC, CHI e compensação do ano até hoje contra o mesmo período do ano anterior. Matriz CHI × compensação: o quadrante de cima à direita é a prioridade 1. Ranking com % de postes com árvore e com acesso difícil e chaves/km. Exporta CSV |
-| **Mapa** | Um alimentador por vez. Tem camadas liga/desliga, filtro E/OU, causa, CHI mínimo e período (ano atual, mesmo período do ano anterior, ano anterior fechado, 12 meses). Três abas: **Resumo** (KPIs, duração média com acesso difícil × normal, CHI por causa), **Trechos** (clusters numerados no mapa e na lista, com a ação sugerida) e **Árvore de manobra** (blocos DJ → RL/CS → CF com CHI originado e ★ chave sugerida). Toque no poste mostra a ficha com ocorrências, proteção a montante e UCs a jusante |
+| **Mapa** | Mesmo layout do RedeViva: mapa em tela cheia. À esquerda ficam os botões redondos **Perguntas**, **Filtros**, **Resultados** e **Mais** (fundo de ruas, exportar, enquadrar). No topo direito estão o alimentador, as camadas de um toque **Árvore \| Acesso \| Chaves** e a faixa "Filtro: … · Limpar". A legenda fica no canto. Filtros: todas as camadas (inclusive reincidente, compensação e CHI alto), E/OU, período, causa e CHI mínimo. Resultados abre no painel lateral com **Trechos** (numerados no mapa), **Árvore de manobra** (blocos DJ → RL/CS → CF, com ★ chave sugerida) e **Resumo**. Tocar no poste ou no trecho abre a ficha, com "← Resultados" para voltar à lista |
 | **Onde agir** | Aplica a mesma pergunta a todos os alimentadores e gera uma lista única por CHI ou compensação, com o Pareto do top 10. "Ver no mapa" abre o trecho. Exporta a carteira de ações |
 | **Dados** | Mostra a base carregada (sintética ou importada), importa com relatório linha a linha, apaga a base importada e lista os parâmetros dos cálculos |
 | **Acesso** | Usuários, logs com verificação de integridade e política (mesmo módulo dos outros apps) |
@@ -88,7 +88,7 @@ bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e:alimentadores
 ```
 
-Resultado atual: **29/29** verificações ponta a ponta e 0 pendências estáticas. A bateria cobre:
+Resultado atual: **30/30** verificações ponta a ponta e 0 pendências estáticas. A bateria cobre:
 
 - camadas e foco preservado;
 - perguntas prontas;
@@ -99,7 +99,7 @@ Resultado atual: **29/29** verificações ponta a ponta e 0 pendências estátic
 - permissão no comando;
 - integridade do log;
 - anti-iframe;
-- acessibilidade: 0 violações no axe-core (WCAG 2.1 AA) em 10 telas a 360 px, alvos de toque ≥ 48 px e nenhuma rolagem horizontal.
+- acessibilidade: 0 violações no axe-core (WCAG 2.1 AA) em 12 telas a 360 px, alvos de toque ≥ 48 px e nenhuma rolagem horizontal.
 
 O CI (`.github/workflows/seguranca-app.yml`) cobre `alimentadores/`.
 
@@ -108,7 +108,7 @@ O CI (`.github/workflows/seguranca-app.yml`) cobre `alimentadores/`.
 ```
 alimentadores/
   index.html, manifest.webmanifest, sw.js, _headers, icon*
-  css/app.css          base visual dos outros apps + camadas, mapa, matriz e árvore de manobra
+  css/app.css          cópia do app/css/app.css (RedeViva) + estilos próprios no fim: camadas, matriz e árvore de manobra
   modelos/             CSV de exemplo para importação (únicos CSV versionados)
   js/
     main.js            sessão, navegação por perfil, topo (base sintética × importada), voltar, service worker

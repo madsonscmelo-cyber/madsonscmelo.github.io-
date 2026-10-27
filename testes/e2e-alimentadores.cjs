@@ -89,30 +89,32 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     // ================= Mapa: camadas, perguntas, trechos, árvore de manobra =================
     await p.selectOption('#sel-al', 'ALM-06');
     await p.waitForTimeout(400);
-    await p.click('.camada--arvore');
+    await p.click('[data-foco="r-arvore"]');
     await p.waitForTimeout(300);
-    const arvoreOn = await p.getAttribute('.camada--arvore', 'aria-pressed');
+    const arvoreOn = await p.getAttribute('[data-foco="r-arvore"]', 'aria-pressed');
     const linhasArvore = await p.locator('#mapa path.cam-arvore').count();
     const focoFicou = await p.evaluate(() => document.activeElement?.dataset?.foco);
-    registrar('F3', 'Camada árvore liga sozinha (estado anunciado, trecho desenhado, foco preservado)', arvoreOn === 'true' && linhasArvore === 1 && focoFicou === 'c-arvore', `aria-pressed=${arvoreOn}, camada SVG=${linhasArvore}, foco=${focoFicou}`);
-    await p.click('.camada--arvore');
-    await p.click('.camada--acesso');
+    registrar('F3', 'Camada árvore liga sozinha num toque (estado anunciado, trecho desenhado, foco preservado)', arvoreOn === 'true' && linhasArvore === 1 && focoFicou === 'r-arvore', `aria-pressed=${arvoreOn}, camada SVG=${linhasArvore}, foco=${focoFicou}`);
+    await p.click('[data-foco="r-arvore"]');
+    await p.click('[data-foco="r-acesso"]');
     await p.waitForTimeout(300);
     const soAcesso = (await p.locator('#mapa path.cam-acesso').count()) === 1 && (await p.locator('#mapa path.cam-arvore').count()) === 0;
     registrar('F4', 'Camada acesso sozinha (árvore desligada some do mapa)', soAcesso, 'só a camada de acesso desenhada');
-    await p.click('.chip--pergunta:has-text("Onde podar primeiro?")');
-    await p.waitForTimeout(400);
-    await p.click('#aba-clusters');
+    const perguntar = async (pg, texto) => { await pg.click('#ctrl-perguntas'); await pg.click(`#painel-perguntas .pergunta:has-text("${texto}")`); await pg.waitForTimeout(400); };
+    await perguntar(p, 'Onde podar primeiro?');
+    const painelAbriu = !(await p.locator('#sheet').isHidden());
     const nTrechos = await p.locator('.trechos .trecho').count();
     const nMarcadores = await p.locator('#mapa .mk-cluster').count();
-    registrar('F5', 'Pergunta pronta "Onde podar primeiro?" forma trechos de árvore com CHI alto por vegetação', nTrechos > 0 && nMarcadores === Math.min(nTrechos, 40), `${nTrechos} trechos, ${nMarcadores} marcadores numerados`);
+    registrar('F5', 'Pergunta pronta "Onde podar primeiro?" forma trechos e abre os resultados no painel lateral', painelAbriu && nTrechos > 0 && nMarcadores === Math.min(nTrechos, 15), `${nTrechos} trechos, ${nMarcadores} marcadores numerados`);
     await p.locator('.trechos .trecho').first().click();
     await p.waitForSelector('#sheet:not([hidden])');
     const fichaTrecho = await p.textContent('#sheet-corpo');
     registrar('F6', 'Ficha do trecho: ação sugerida, CHI, compensação, % árvore e acesso, CHI por causa', /Poda/.test(fichaTrecho) && /CHI originado/.test(fichaTrecho) && /Vegetação/.test(fichaTrecho), fichaTrecho.slice(0, 90));
+    const voltou = await p.locator('#sheet-rodape button:has-text("Resultados")').count();
+    await p.click('#sheet-rodape button:has-text("Resultados")');
+    registrar('F6b', 'Ficha tem "← Resultados" e volta para a lista', voltou === 1 && (await p.locator('.trechos .trecho').count()) === nTrechos, 'rodapé da ficha');
     await p.click('#sheet-fechar');
-    await p.click('.chip--pergunta:has-text("Onde falta chave?")');
-    await p.waitForTimeout(400);
+    await perguntar(p, 'Onde falta chave?');
     const nNos = await p.locator('.arvore-manobra .no').count();
     const nSug = await p.locator('#mapa .mk-sugestao').count();
     const nChaves = await p.locator('#mapa .mk-chave').count();
@@ -185,11 +187,11 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     const xss = await p.evaluate(() => window.__xss);
     const nomeTexto = await p.locator('#view-carteira tbody').textContent();
     registrar('6.3', 'Texto importado é exibido como texto (sem execução de HTML)', xss === undefined && nomeTexto.includes('<img src=x'), 'nome com <img onerror> aparece literal');
-    const [dl2] = await Promise.all([p.waitForEvent('download'), (async () => { await irPara(p, 'mapa'); await p.click('.chip--pergunta:has-text("Quem é reincidente?")'); await p.click('.camada--reinc'); await p.click('.camada--arvore'); await p.click('#aba-clusters'); })().then(async () => {
+    const [dl2] = await Promise.all([p.waitForEvent('download'), (async () => { await irPara(p, 'mapa'); if (await p.locator('.filtros-ativos button').count()) await p.click('.filtros-ativos button'); await p.click('[data-foco="r-arvore"]'); })().then(async () => {
       // base importada sem ocorrências: força um trecho de árvore marcando os postes, só para exportar
       await mod(p, async () => { const { estado } = await import('./js/store.js'); const D = await import('./js/dominio.js'); estado.rede.postes.forEach((x) => { x.veg = 1; }); estado.rede.versao += '-t'; D.limparCache(); });
-      await p.click('.camada--acesso'); await p.click('.camada--acesso');
-      await p.click('#view-mapa button:has-text("Exportar trechos")');
+      await p.click('[data-foco="r-acesso"]'); await p.click('[data-foco="r-acesso"]');
+      await p.click('#ctrl-mais'); await p.click('#ctrl-exportar');
     })]);
     const csv2 = fs.readFileSync(await dl2.path(), 'utf8');
     registrar('4.9', 'Exportação neutraliza fórmula vinda da base (=HYPERLINK vira texto)', csv2.includes("'=HYPERLINK") && !/;=HYPERLINK/.test(csv2), csv2.split('\n')[1]?.slice(0, 80));
@@ -240,7 +242,7 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
       const ruins = await m.evaluate(() => [...document.querySelectorAll('button, a.btn, input:not([type=file]):not([type=hidden]), select, textarea, summary, label.btn')]
         .filter((n) => n.offsetParent !== null && !n.closest('.sr-only'))
         .map((n) => ({ n, r: n.getBoundingClientRect() }))
-        .filter(({ r }) => r.height < 47.5)
+        .filter(({ n, r }) => (n.type === 'checkbox' ? Math.max(r.height, n.closest('label')?.getBoundingClientRect().height || 0) : r.height) < 47.5) // checkbox: o alvo é a linha inteira (label)
         .map(({ n, r }) => `${n.tagName.toLowerCase()}${n.className ? '.' + String(n.className).split(' ')[0] : ''}(${Math.round(r.height)}px "${(n.textContent || n.placeholder || n.type || '').trim().slice(0, 18)}")`));
       ruins.forEach((x) => pequenos.push(`${tela}: ${x}`));
       if (AXE) {
@@ -254,10 +256,13 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     await medir('login');
     await entrar(m, 'S4202');
     await medir('mapa-supervisor');
-    await m.click('.chip--pergunta:has-text("Onde o acesso alonga")');
-    await m.click('#aba-clusters');
+    await m.click('#ctrl-perguntas'); await medir('mapa-perguntas');
+    await m.click('#painel-perguntas .pergunta:has-text("Onde o acesso alonga")');
     await medir('mapa-acesso');
-    await m.click('.chip--pergunta:has-text("Onde falta chave?")');
+    await m.click('#sheet-fechar'); await m.waitForTimeout(300);
+    await m.click('#ctrl-filtros'); await medir('mapa-filtros'); await m.click('#ctrl-filtros');
+    await m.click('#ctrl-perguntas');
+    await m.click('#painel-perguntas .pergunta:has-text("Onde falta chave?")');
     await medir('mapa-arvore-manobra');
     await m.locator('.arvore-manobra .no__btn').first().tap();
     await medir('ficha-poste');
@@ -269,9 +274,9 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     await entrar(m, 'G4001');
     await irPara(m, 'dados'); await medir('dados-gestor');
     await irPara(m, 'acesso'); await m.waitForTimeout(400); await medir('acesso');
-    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '10 telas verificadas');
+    registrar('8.1', 'Viewport 360 px sem rolagem horizontal', !estouros.length, estouros.join(', ') || '12 telas verificadas');
     registrar('8.2', 'Alvos de toque ≥ 48 px', !pequenos.length, pequenos.length ? `${pequenos.length} abaixo: ${pequenos.slice(0, 6).join('; ')}` : 'todos os controles visíveis ≥ 48 px');
-    registrar('A11Y', 'axe-core (WCAG 2.1 A/AA) sem violações nas telas', AXE ? !a11y.length : false, AXE ? (a11y.slice(0, 8).join('; ') || '0 violações em 10 telas') : 'axe-core não instalado (npm install em testes/)');
+    registrar('A11Y', 'axe-core (WCAG 2.1 A/AA) sem violações nas telas', AXE ? !a11y.length : false, AXE ? (a11y.slice(0, 8).join('; ') || '0 violações em 12 telas') : 'axe-core não instalado (npm install em testes/)');
     await cm.close();
 
     registrar('6.x', 'Sem erros de JavaScript nem violações de CSP no console', !erros.length, erros.slice(0, 3).join(' | ') || 'console limpo');

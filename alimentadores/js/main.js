@@ -45,7 +45,7 @@ function sair(acao = 'LOGOUT', detalhe = {}) {
   encerrarSessao(acao, detalhe);
   fecharSheet();
   $('#menu-usuario').hidden = true;
-  $$('.view').forEach((v) => { v.replaceChildren(); v.hidden = true; });
+  $$('.view').forEach((v) => { if (v.id !== 'view-mapa') v.replaceChildren(); v.hidden = true; }); // o mapa (Leaflet) e seus controles ficam montados
   $('#nav').replaceChildren();
   telaLogin(entrar);
 }

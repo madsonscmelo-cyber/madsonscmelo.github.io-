@@ -92,6 +92,7 @@ export function abrirPoste(alId, posteId, aoVerNoMapa, aoVoltar) {
       item('Alimentador', `${idx.al.id} · ${idx.al.nome}`), item('Período', per.rotulo),
       item('Transformador', p.trafo ? `${p.trafo} · ${fmtNum(p.ucs)} UCs` : '—'), item('UCs a jusante', fmtNum(idx.ucsSub.get(p.id))),
       item('Proteção a montante', prot ? `${CHAVES[prot.chave] || 'Início'} no poste ${codPoste(prot)}` : '—'),
+      p.risco !== undefined ? item('Score de risco do poste', `${p.risco} de 100${p.risco >= 60 ? ' · crítico' : ''}`) : null,
       item('Ocorrências originadas', String(s.n)), item('CHI originado', fmtChi(s.chi)), item('Compensação', fmtR(s.comp))),
     el('h3', { text: `Ocorrências no período (${ocs.length})` }),
     ocs.length ? el('ul', { class: 'lista' }, ocs.slice(0, 30).map((o) => el('li', { class: 'lista__item' },

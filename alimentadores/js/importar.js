@@ -28,6 +28,7 @@ const ALIAS = {
   mes: ['mes', 'competencia', 'mes_ref'],
   ano: ['ano'],
   valor: ['valor', 'valor_rs', 'compensacao', 'compensacao_rs'],
+  risco: ['score', 'risco', 'score_risco'], // score de risco do poste 0–100 (classificação poste a poste)
 };
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/[\s.-]+/g, '_');
 
@@ -141,9 +142,10 @@ export function montarBase({ postes: txtPostes, ocorrencias: txtOc = '', compens
     if (chave === null) { recusar(rel, 'postes', i + 1, `tipo de chave desconhecido: "${texto(g('chave'))}" (use DJ, RL, CS, CF ou NA)`); continue; }
     const pid = `${al}|${id}`;
     if (porId.has(pid)) { recusar(rel, 'postes', i + 1, `poste ${id} repetido no ${al}`); continue; }
-    const ucs = num(g('ucs'));
+    const ucs = num(g('ucs')), risco = num(g('risco'));
     const p = { id: pid, cod: id, al, pai: texto(g('pai'), 40), lat, lon, veg: sim(g('arvore')) ? 1 : 0,
       acesso: sim(g('acesso')) ? 'DIFICIL' : '', acessoMotivo: texto(g('acessoMotivo'), 60), chave, trafo: texto(g('trafo'), 30), ucs: Number.isFinite(ucs) && ucs > 0 ? Math.round(ucs) : 0 };
+    if (risco >= 0 && risco <= 100) p.risco = Math.round(risco);
     postes.push(p); porId.set(pid, p);
     if (!alimentadores.has(al)) alimentadores.set(al, { id: al, nome: texto(g('nome'), 60) || al, conjunto: texto(g('conjunto'), 40) || '—', se: texto(g('se'), 40) || '—', tipo: '—' });
     if (!p.pai) semPai.set(al, (semPai.get(al) || 0) + 1);

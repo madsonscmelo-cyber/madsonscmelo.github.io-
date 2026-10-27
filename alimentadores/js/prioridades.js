@@ -2,14 +2,14 @@
 // (ou de chaves novas) ordenada por CHI ou por compensação. É a carteira de ações para o plano de manutenção e o PDI.
 import { el, preencher, csvStringify, baixarArquivo, hojeISO, fmtNum } from './util.js';
 import { estado } from './store.js';
-import { PERGUNTAS, CAUSAS, CHAVES, TIPOS_ACAO, periodos, indexar, statsPostes, clusters, blocos, acaoSugerida } from './dominio.js';
+import { PERGUNTAS, CAUSAS, CHAVES, TIPOS_ACAO, perguntaEfetiva, periodos, indexar, statsPostes, clusters, blocos, acaoSugerida } from './dominio.js';
 import { fmt1, fmtChi, fmtR, codPoste } from './ui.js';
 import { logar } from './auditoria.js';
 
 export function telaPrioridades(raiz, ctx) {
   const f = (raiz.__f ||= { pergunta: 'podar', ordem: 'chi', conjunto: estado.usuario.conjunto || '' });
   const P = periodos(), per = P[estado.sel.periodo] || P.ATUAL;
-  const q = PERGUNTAS.find((x) => x.id === f.pergunta);
+  const q = perguntaEfetiva(PERGUNTAS.find((x) => x.id === f.pergunta), estado.rede);
   const als = estado.rede.alimentadores.filter((a) => !f.conjunto || a.conjunto === f.conjunto);
   const linhas = [];
   for (const al of als) {

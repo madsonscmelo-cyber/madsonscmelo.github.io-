@@ -4,7 +4,7 @@
 // Leaflet vem do mesmo vendor do RedeViva (../app/vendor/leaflet). Fundo: ruas (OSM), satélite (Esri), terreno (OpenTopoMap) ou nenhum.
 import { el, $, preencher, fmtNum, csvStringify, baixarArquivo, hojeISO, toast } from './util.js';
 import { estado } from './store.js';
-import { CAMADAS, CAUSAS, CHAVES, PERGUNTAS, TIPOS_ACAO, periodos, indexar, statsPostes, st, metricas, clusters, blocos, filtroPostes, montarFiltro, limiarChiAlto, predicados, acaoSugerida } from './dominio.js';
+import { CAMADAS, CAUSAS, CHAVES, PERGUNTAS, TIPOS_ACAO, perguntaEfetiva, periodos, indexar, statsPostes, st, metricas, clusters, blocos, filtroPostes, montarFiltro, limiarChiAlto, predicados, acaoSugerida } from './dominio.js';
 import { abrirSheet, sheetAtual, abrirPoste, abrirCluster, fmt1, fmt2, fmtChi, fmtR, codPoste, kpi, delta, barra, item } from './ui.js';
 import { logar } from './auditoria.js';
 
@@ -20,7 +20,7 @@ const ABAS = { clusters: 'Trechos', blocos: 'Árvore de manobra', resumo: 'Resum
 const RAPIDAS = ['arvore', 'acesso', 'chaves']; // camadas de um toque no topo do mapa
 const MAX_MARCADORES = 500; // acima disso os destaques vão para o canvas (desempenho em alimentador grande)
 
-let mapa = null, fundo = null, fundoAtual = '', grupoRede, grupoCamadas, grupoClusters, grupoPontos, grupoMarcas, renderer;
+let mapa = null, fundo = null, fundoAtual = '', grupoPostes, muitosPostes = false, grupoRede, grupoCamadas, grupoClusters, grupoPontos, grupoMarcas, renderer;
 let ultimo = null; // resultado do último cálculo (alimenta o painel de resultados e a legenda)
 
 function garantirMapa() {
@@ -32,9 +32,18 @@ function garantirMapa() {
   grupoRede = L.layerGroup().addTo(mapa);
   grupoCamadas = L.layerGroup().addTo(mapa);
   grupoClusters = L.layerGroup().addTo(mapa);
+  grupoPostes = L.layerGroup();
   grupoPontos = L.layerGroup().addTo(mapa);
+  mapa.on('zoomend', mostrarPostes);
   grupoMarcas = L.layerGroup().addTo(mapa);
   montarControles();
+}
+
+function mostrarPostes() {
+  if (!mapa) return;
+  const ver = !muitosPostes || mapa.getZoom() >= 15;
+  if (ver && !mapa.hasLayer(grupoPostes)) grupoPostes.addTo(mapa);
+  if (!ver && mapa.hasLayer(grupoPostes)) grupoPostes.remove();
 }
 
 function aplicarFundo() {
@@ -59,6 +68,7 @@ const ESTILO = {
   comp: { color: '#3d2a00', fillColor: '#f2b705', weight: 2, fillOpacity: 1 },
   reinc: { color: '#ffffff', fillColor: '#7b3fb5', weight: 2, fillOpacity: 1 },
   aceso: { color: '#14201a', fillColor: '#ef8a00', weight: 2, fillOpacity: 1 },
+  risco: { color: '#ffffff', fillColor: '#ad1457', weight: 2, fillOpacity: 1 },
   anel: { color: '#b07d00', fillColor: '#f2b705', weight: 2, fillOpacity: 0.12 },
 };
 
@@ -73,7 +83,9 @@ function segmentos(idx, teste) {
   return out;
 }
 
-export const nivelTrecho = (c, lista) => { const mx = lista[0]?.chi || 0; return !mx || !c.chi ? 'baixo' : c.chi >= mx * 0.5 ? 'alto' : c.chi >= mx * 0.15 ? 'medio' : 'baixo'; };
+// Peso do trecho: CHI quando há ocorrências; sem ocorrências, nº de postes críticos (score ≥ 60).
+const pesoTrecho = (c) => (c.chi > 0 ? c.chi : c.criticos || 0);
+export const nivelTrecho = (c, lista) => { const mx = Math.max(0, ...lista.map(pesoTrecho)), v = pesoTrecho(c); return !mx || !v ? 'baixo' : v >= mx * 0.5 ? 'alto' : v >= mx * 0.15 ? 'medio' : 'baixo'; };
 const icone = (cls, txt, tam = 24) => L.divIcon({ html: el('span', { class: cls, text: txt }), className: 'mk-wrap', iconSize: [tam, tam] });
 const verCluster = (c) => mapa?.fitBounds(L.latLngBounds(c.postes.map((p) => [p.lat, p.lon])).pad(0.4), { maxZoom: 18 });
 const verPoste = (p) => mapa?.setView([p.lat, p.lon], 18);
@@ -83,7 +95,7 @@ const tocarPoste = (id) => abrirPoste(estado.sel.al, id, verPoste, voltarResulta
 
 function desenhar(r) {
   const { idx, stats, cfg, lista, sugestoes } = r;
-  [grupoRede, grupoCamadas, grupoClusters, grupoPontos, grupoMarcas].forEach((g) => g.clearLayers());
+  [grupoRede, grupoCamadas, grupoClusters, grupoPostes, grupoPontos, grupoMarcas].forEach((g) => g.clearLayers());
   const ativas = new Set(cfg.camadas);
   // Rede (como o tronco do RedeViva) e camadas de trecho por cima
   L.polyline(segmentos(idx, () => true), { className: 'tronco rede', weight: 5, interactive: false }).addTo(grupoRede);
@@ -106,14 +118,17 @@ function desenhar(r) {
   const pr = predicados(stats, limiarChiAlto(stats)), acende = comPonto ? filtroPostes(idx, stats, cfg) : () => false;
   const destaques = [];
   for (const p of idx.postes) {
-    const tipo = ativas.has('chiAlto') && pr.chiAlto(p) ? 'chi' : ativas.has('reinc') && pr.reinc(p) ? 'reinc' : ativas.has('comp') && pr.comp(p) ? 'comp' : acende(p) ? 'aceso' : '';
+    const tipo = ativas.has('chiAlto') && pr.chiAlto(p) ? 'chi' : ativas.has('risco') && pr.risco(p) ? 'risco' : ativas.has('reinc') && pr.reinc(p) ? 'reinc' : ativas.has('comp') && pr.comp(p) ? 'comp' : acende(p) ? 'aceso' : '';
     if (tipo) { destaques.push([p, tipo]); continue; }
     const c = L.circleMarker([p.lat, p.lon], { renderer, radius: 3.5, ...ESTILO.base });
     c.on('click', () => tocarPoste(p.id));
-    c.addTo(grupoPontos);
+    c.addTo(grupoPostes);
   }
-  const LETRA = { chi: '!', reinc: 'R', comp: '$', aceso: '•' };
-  const NOME = { chi: 'CHI alto', reinc: 'reincidente', comp: 'compensação', aceso: 'no filtro' };
+  // Alimentador real tem milhares de postes: de longe, a linha da rede basta; o poste solto aparece a partir do zoom 15.
+  muitosPostes = idx.postes.length > 2500;
+  mostrarPostes();
+  const LETRA = { chi: '!', reinc: 'R', comp: '$', aceso: '•', risco: 'S' };
+  const NOME = { chi: 'CHI alto', reinc: 'reincidente', comp: 'compensação', aceso: 'no filtro', risco: 'score crítico' };
   for (const [p, tipo] of destaques) {
     if (destaques.length > MAX_MARCADORES) {
       const c = L.circleMarker([p.lat, p.lon], { renderer, radius: 6, ...ESTILO[tipo] });
@@ -235,13 +250,13 @@ function montarPerguntas() {
     el('strong', { text: 'Perguntas prontas' }),
     el('div', { class: 'perguntas-lista' }, PERGUNTAS.map((x) => el('button', { type: 'button', class: `pergunta${x.id === s.pergunta ? ' ativo' : ''}`, 'aria-pressed': String(x.id === s.pergunta), dataset: { foco: `p-${x.id}` }, text: x.texto, onclick: () => {
       if (s.pergunta === x.id) Object.assign(s, { pergunta: '', camadas: [], causa: '', modo: 'OU' });
-      else Object.assign(s, { pergunta: x.id, camadas: [...x.camadas], modo: x.modo, causa: x.causa, chiMin: 0, aba: x.aba });
+      else { const e = perguntaEfetiva(x, estado.rede); Object.assign(s, { pergunta: x.id, camadas: [...e.camadas], modo: e.modo, causa: e.causa, chiMin: 0, aba: x.aba }); }
       registrar('PERGUNTA_PRONTA', { pergunta: x.id, ligada: s.pergunta === x.id });
       $('#painel-perguntas').hidden = true;
       renderizar();
       if (s.pergunta) abrirResultados();
     } }))),
-    q ? el('p', { class: 'explica', text: q.explica }) : el('p', { class: 'muted pequeno', text: 'Cada pergunta liga as camadas e o filtro que respondem a uma decisão. Toque de novo para desligar.' }));
+    q ? el('p', { class: 'explica', text: perguntaEfetiva(q, estado.rede).explica }) : el('p', { class: 'muted pequeno', text: 'Cada pergunta liga as camadas e o filtro que respondem a uma decisão. Toque de novo para desligar.' }));
 }
 
 function montarFiltros(P) {
@@ -280,8 +295,8 @@ function montarLegenda() {
       leg(el('i', { class: 'mk-cluster mk-cluster--leg mk-cluster--alto', text: '1', 'aria-hidden': 'true' }), 'Trecho: CHI alto'),
       leg(el('i', { class: 'mk-cluster mk-cluster--leg mk-cluster--medio', text: '2', 'aria-hidden': 'true' }), 'médio'),
       leg(el('i', { class: 'mk-cluster mk-cluster--leg mk-cluster--baixo', text: '3', 'aria-hidden': 'true' }), 'baixo (nº = ranking)'), leg(mk('mk--aceso', '•'), 'Poste que acende no filtro')) : null,
-    s.has('chiAlto') || s.has('reinc') || s.has('comp') ? el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Poste' }),
-      s.has('chiAlto') ? leg(mk('mk--chi', '!'), 'CHI alto') : null, s.has('reinc') ? leg(mk('mk--reinc', 'R'), 'Reincidente') : null, s.has('comp') ? leg(mk('mk--comp', '$'), 'Compensação (anel = R$)') : null) : null,
+    s.has('chiAlto') || s.has('reinc') || s.has('comp') || s.has('risco') ? el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Poste' }),
+      s.has('chiAlto') ? leg(mk('mk--chi', '!'), 'CHI alto') : null, s.has('reinc') ? leg(mk('mk--reinc', 'R'), 'Reincidente') : null, s.has('comp') ? leg(mk('mk--comp', '$'), 'Compensação (anel = R$)') : null, s.has('risco') ? leg(mk('mk--risco', 'S'), 'Poste crítico (score ≥ 60)') : null) : null,
     s.has('chaves') || ultimo?.sugestoes.length ? el('div', { class: 'legenda__grupo' }, el('strong', { text: 'Chaves' }),
       s.has('chaves') ? ['DJ', 'RL', 'CS', 'CF', 'NA'].map((c) => leg(el('i', { class: `mk-chave mk-chave--${c.toLowerCase()}`, text: c, 'aria-hidden': 'true' }), CHAVES[c])) : null,
       ultimo?.sugestoes.length ? leg(el('i', { class: 'mk-sugestao mk-sugestao--leg', text: '★', 'aria-hidden': 'true' }), 'Chave sugerida (maior CHI evitado)') : null) : null);
@@ -360,6 +375,7 @@ function abaResumo(M, MA, P, per) {
     el('div', { class: 'meta' },
       item('Postes / km', `${fmtNum(M.postes)} · ${fmt1(M.km)} km`), item('UCs', fmtNum(M.ucs)),
       item('Postes com árvore', `${Math.round(M.pctVeg * 100)}%`), item('Postes com acesso difícil', `${Math.round(M.pctAcesso * 100)}%`),
+      item('Postes críticos (score ≥ 60)', fmtNum(M.criticos)), item('Chaves', fmtNum(M.chaves)),
       item('Duração média — acesso difícil', M.durDificil === null ? '—' : `${fmt2(M.durDificil)} h`), item('Duração média — acesso normal', M.durNormal === null ? '—' : `${fmt2(M.durNormal)} h`)),
     M.durDificil && M.durNormal && M.durDificil > M.durNormal * 1.3 ? el('p', { class: 'bloco bloco--aviso pequeno', text: `No acesso difícil a interrupção dura ${fmt1(M.durDificil / M.durNormal)}× mais. Ali o ganho de CHI vem de reduzir o tempo (chave telecomandada, religador, base avançada), não só de evitar a falha.` }) : null,
     el('h3', { text: 'CHI por causa' }),
@@ -427,6 +443,6 @@ function abaBlocos(idx, lista) {
         el('span', { class: `mk-chave mk-chave--${(b.cabeca.chave || 'dj').toLowerCase()}`, text: b.cabeca.chave || 'INÍCIO' }),
         el('span', { class: 'no__txt' },
           el('strong', { text: `${codPoste(b.cabeca)} · ${b.membros.length} postes · ${fmt1(b.km)} km · ${fmtNum(b.ucs)} UCs (${fmtNum(b.ucsJusante)} a jusante)` }),
-          el('span', { class: 'muted pequeno', text: `CHI originado ${fmtChi(b.chi)} · ${b.n} ocorr. · árvore ${Math.round(b.pctVeg * 100)}% · acesso difícil ${Math.round(b.pctAcesso * 100)}%${b.temNA ? ' · tem interligação NA' : ''}` }),
+          el('span', { class: 'muted pequeno', text: `CHI originado ${fmtChi(b.chi)} · ${b.n} ocorr.${b.criticos ? ` · ${b.criticos} poste(s) crítico(s)` : ''} · árvore ${Math.round(b.pctVeg * 100)}% · acesso difícil ${Math.round(b.pctAcesso * 100)}%${b.temNA ? ' · tem interligação NA' : ''}` }),
           barra(b.chi / maxChi, b.chi / maxChi > 0.6 ? 'alerta' : '')))))));
 }

@@ -88,10 +88,12 @@ function lerCausa(v) {
   const s = norm(v);
   if (!s) return 'OUTRA';
   if (CAUSAS[s.toUpperCase()]) return s.toUpperCase();
+  if (/programad|construcao|manutencao_prevent|desligamento_para/.test(s)) return 'PROG';
   if (/veget|arvor|galho|poda/.test(s)) return 'VEG';
   if (/descarga|raio|atmosf/.test(s)) return 'DESC';
-  if (/equip|falha|isolador|cruzeta|trafo|conector|cabo/.test(s)) return 'EQUIP';
-  if (/animal|passaro|ave|gamba|cobra/.test(s)) return 'ANIMAL';
+  if (/equip|falha|isolador|cruzeta|trafo|conector|cabo|deterior|envelhec|material|corrosao|sobrecarga/.test(s)) return 'EQUIP';
+  if (/anima|inseto|passaro|ave|gamba|cobra|abelha/.test(s)) return 'ANIMAL';
+  if (/chuva|vento|fenomeno|tempestade|inundac|queimada/.test(s)) return 'CLIMA';
   if (/terceir|abalroa|vandal|furto|pipa|caminhao/.test(s)) return 'TERCEIRO';
   return 'OUTRA';
 }
@@ -184,10 +186,11 @@ export function montarBase({ postes: txtPostes, ocorrencias: txtOc = '', compens
   if (paiInexistente) rel.avisos.push(`${paiInexistente} poste(s) apontam para um poste pai que não está no arquivo: viraram início de trecho.`);
   if (ciclos) rel.avisos.push(`${ciclos} ciclo(s) na ligação poste → pai foram quebrados.`);
   const semUcs = [...alimentadores.values()].filter((a) => !postes.some((p) => p.al === a.id && p.ucs > 0)).map((a) => a.id);
-  if (semUcs.length) rel.avisos.push(`${semUcs.length === alimentadores.size ? 'Nenhum alimentador' : `${semUcs.length} alimentador(es) (${semUcs.slice(0, 5).join(', ')}${semUcs.length > 5 ? '…' : ''})`} com UCs nos postes: DEC/FEC e UCs a jusante ficam zerados. Inclua a coluna ucs nos postes com transformador.`);
+  if (semUcs.length) rel.avisos.push(`${semUcs.length === alimentadores.size ? 'Nenhum alimentador tem' : `${semUcs.length} alimentador(es) sem`} UCs nos postes${semUcs.length === alimentadores.size ? '' : ` (${semUcs.slice(0, 5).join(', ')}${semUcs.length > 5 ? '…' : ''})`}: DEC/FEC e UCs a jusante ficam zerados. Inclua a coluna ucs nos postes com transformador.`);
 
   // Ocorrências
   const ocorrencias = [];
+  let semLocal = 0;
   if (txtOc.trim()) {
     const lo = lerCsv(txtOc), mo = mapearColunas(lo[0] || []);
     const faltaO = ['data', 'alimentador', 'poste', 'ucs'].filter((k) => mo[k] === undefined);
@@ -196,20 +199,24 @@ export function montarBase({ postes: txtPostes, ocorrencias: txtOc = '', compens
     else {
       for (let i = 1; i < lo.length; i++) {
         const l = lo[i], g = (k) => (mo[k] === undefined ? '' : l[mo[k]]);
-        const data = lerData(g('data')), pid = `${texto(g('alimentador'), 30)}|${texto(g('poste'), 40)}`, ucs = num(g('ucs'));
+        const al = texto(g('alimentador'), 30), cod = texto(g('poste'), 40), data = lerData(g('data')), pid = cod ? `${al}|${cod}` : '', ucs = num(g('ucs'));
         let dur = num(g('dur'));
         const chi = num(g('chi'));
         if (!data) { recusar(rel, 'ocorrencias', i + 1, `data inválida: "${texto(g('data'))}"`); continue; }
-        if (!porId.has(pid)) { recusar(rel, 'ocorrencias', i + 1, `poste ${texto(g('poste'))} não existe na planilha de postes do ${texto(g('alimentador'))}`); continue; }
+        // Poste vazio = ocorrência sem local (entra no DEC/CHI do alimentador, não em trecho). Poste preenchido tem de existir.
+        if (!alimentadores.has(al)) { recusar(rel, 'ocorrencias', i + 1, `alimentador ${al || '(vazio)'} não existe na planilha de postes`); continue; }
+        if (pid && !porId.has(pid)) { recusar(rel, 'ocorrencias', i + 1, `poste ${cod} não existe na planilha de postes do ${al}`); continue; }
         if (!(ucs > 0)) { recusar(rel, 'ocorrencias', i + 1, 'ucs vazio ou zero'); continue; }
         if (!(dur > 0) && chi > 0) dur = chi / ucs;
         if (!(dur > 0) || dur > 240) { recusar(rel, 'ocorrencias', i + 1, 'duração ausente, zero ou acima de 240 h'); continue; }
         const disp = texto(g('disp'), 40);
-        ocorrencias.push({ id: `OC-${i}`, al: pid.split('|')[0], poste: pid, data, causa: lerCausa(g('causa')), ucs: Math.round(ucs), dur: Math.round(dur * 100) / 100,
-          chi: Math.round((chi > 0 ? chi : ucs * dur) * 10) / 10, disp: disp && porId.has(`${pid.split('|')[0]}|${disp}`) ? `${pid.split('|')[0]}|${disp}` : '' });
+        if (!pid) semLocal++;
+        ocorrencias.push({ id: `OC-${i}`, al, poste: pid, data, causa: lerCausa(g('causa')), ucs: Math.round(ucs), dur: Math.round(dur * 100) / 100,
+          chi: Math.round((chi > 0 ? chi : ucs * dur) * 10) / 10, disp: disp && porId.has(`${al}|${disp}`) ? `${al}|${disp}` : '' });
         rel.aceitas++;
       }
     }
+    if (semLocal) rel.avisos.push(`${semLocal} ocorrência(s) sem poste de origem: entram no DEC/FEC e no CHI do alimentador, mas não em trechos nem na chave sugerida.`);
   } else rel.avisos.push('Sem planilha de ocorrências: o mapa mostra a marcação de campo (árvore, acesso, chaves), mas CHI, DEC/FEC e reincidência ficam zerados.');
 
   // Compensações por mês ou por ano
@@ -221,13 +228,14 @@ export function montarBase({ postes: txtPostes, ocorrencias: txtOc = '', compens
     else {
       for (let i = 1; i < lc.length; i++) {
         const l = lc[i], g = (k) => (mc[k] === undefined ? '' : l[mc[k]]);
-        const pid = `${texto(g('alimentador'), 30)}|${texto(g('poste'), 40)}`, valor = num(g('valor'));
+        const al = texto(g('alimentador'), 30), cod = texto(g('poste'), 40), pid = cod ? `${al}|${cod}` : '', valor = num(g('valor'));
         const mesTxt = String(g('mes') || '').trim(), anoTxt = String(g('ano') || '').trim();
         const mes = /^\d{4}-\d{2}$/.test(mesTxt) ? mesTxt : /^\d{2}\/\d{4}$/.test(mesTxt) ? `${mesTxt.slice(3)}-${mesTxt.slice(0, 2)}` : /^\d{4}$/.test(anoTxt) ? `${anoTxt}-00` : null;
-        if (!porId.has(pid)) { recusar(rel, 'compensacoes', i + 1, `poste ${texto(g('poste'))} não existe no ${texto(g('alimentador'))}`); continue; }
+        if (!alimentadores.has(al)) { recusar(rel, 'compensacoes', i + 1, `alimentador ${al || '(vazio)'} não existe na planilha de postes`); continue; }
+        if (pid && !porId.has(pid)) { recusar(rel, 'compensacoes', i + 1, `poste ${cod} não existe no ${al}`); continue; }
         if (!mes) { recusar(rel, 'compensacoes', i + 1, 'mês (AAAA-MM ou MM/AAAA) ou ano (AAAA) inválido'); continue; }
         if (!(valor > 0)) { recusar(rel, 'compensacoes', i + 1, 'valor vazio ou zero'); continue; }
-        compensacoes.push({ poste: pid, mes, valor });
+        compensacoes.push({ al, poste: pid, mes, valor }); // poste vazio = compensação do alimentador sem trafo identificado
         rel.aceitas++;
       }
     }

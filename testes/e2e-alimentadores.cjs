@@ -125,8 +125,15 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
       const P = D.periodos(), idx = D.indexar(estado.rede, 'ALM-06'), st = D.statsPostes(idx, P.ATUAL);
       const b = D.blocos(idx, st, P.ATUAL).find((x) => x.sugestao);
       const x = b.sugestao.poste.id;
+      // km a jusante dentro do bloco (para ocorrência registrada na própria chave do bloco)
+      const noBloco = new Set(b.membros), km = (id) => idx.filhos.get(id).filter((f) => noBloco.has(f)).reduce((t, f) => t + D.distM(idx.porId.get(f), idx.porId.get(id)) / 1000 + km(f), 0);
+      const frac = km(b.cabeca.id) ? km(x) / km(b.cabeca.id) : 0;
       let esperado = 0;
-      for (const id of b.membros) for (const o of idx.ocPorPoste.get(id) || []) if (D.noPeriodo(o.data, P.ATUAL) && idx.jusante(x, o.poste)) esperado += Math.max(0, o.ucs - idx.ucsSub.get(x)) * o.dur;
+      for (const id of b.membros) for (const o of idx.ocPorPoste.get(id) || []) {
+        if (!D.noPeriodo(o.data, P.ATUAL)) continue;
+        if (o.poste === b.cabeca.id) esperado += Math.max(0, o.ucs - idx.ucsSub.get(x)) * o.dur * frac;
+        else if (idx.jusante(x, o.poste)) esperado += Math.max(0, o.ucs - idx.ucsSub.get(x)) * o.dur;
+      }
       return { calc: b.sugestao.chiEvitado, esperado };
     });
     registrar('F8', 'Cálculo do CHI evitado confere com a fórmula documentada', Math.abs(regra.calc - regra.esperado) < 0.01, `${regra.calc.toFixed(1)} = ${regra.esperado.toFixed(1)}`);

@@ -34,7 +34,7 @@ export function telaPrioridades(raiz, ctx) {
     baixarArquivo(`onde-agir-${q.id}-${hojeISO()}.csv`, csvStringify([
       ['rank', 'alimentador', 'conjunto', 'tipo', 'poste', 'postes', 'km', 'chi_ou_chi_evitado', 'compensacao', 'ocorrencias', 'causa_principal', 'acao', 'periodo'],
       ...linhas.map((x, i) => x.tipo === 'CHAVE'
-        ? [i + 1, x.al.id, x.al.conjunto, 'Nova chave', codPoste(x.b.sugestao.poste), x.b.membros.length, fmt1(x.b.km), Math.round(x.chi), 0, x.b.sugestao.ocorrencias, '', `Chave/religador no poste ${codPoste(x.b.sugestao.poste)} (bloco ${codPoste(x.b.cabeca)})`, per.rotulo]
+        ? [i + 1, x.al.id, x.al.conjunto, 'Nova chave', codPoste(x.b.sugestao.poste), x.b.membros.length, fmt1(x.b.km), Math.round(x.chi), 0, fmt1(x.b.sugestao.ocorrencias), '', `Chave/religador no poste ${codPoste(x.b.sugestao.poste)} (bloco ${codPoste(x.b.cabeca)})`, per.rotulo]
         : [i + 1, x.al.id, x.al.conjunto, TIPOS_ACAO[acaoSugerida(x.c).tipo], codPoste(x.c.montante), x.c.ids.length, fmt1(x.c.km), Math.round(x.chi), Math.round(x.comp), x.c.n, CAUSAS[x.c.causaPrinc] || '', acaoSugerida(x.c).texto, per.rotulo])]));
   } });
 

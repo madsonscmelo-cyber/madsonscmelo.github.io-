@@ -435,7 +435,7 @@ function abaBlocos(idx, lista) {
     sug.length ? el('div', { class: 'bloco bloco--destaque' }, el('h3', { text: '★ Onde uma chave nova mais evita CHI' }),
       el('ol', { class: 'lista' }, sug.slice(0, 5).map((b) => el('li', { class: 'lista__item' },
         el('button', { type: 'button', class: 'btn btn--txt', text: `Poste ${codPoste(b.sugestao.poste)}`, onclick: () => tocar(b.sugestao.poste.id) }),
-        el('span', { text: ` · evita ~${fmtChi(b.sugestao.chiEvitado)} CHI (${b.sugestao.ocorrencias} ocorrências a jusante) · bloco de ${CHAVES[b.cabeca.chave] || 'início'} ${codPoste(b.cabeca)}${b.pctAcesso > 0.3 ? ' · acesso difícil: prefira telecomandada' : ''}` })))),
+        el('span', { text: ` · evita ~${fmtChi(b.sugestao.chiEvitado)} CHI (${fmt1(b.sugestao.ocorrencias)} ocorrências esperadas a jusante) · bloco de ${CHAVES[b.cabeca.chave] || 'início'} ${codPoste(b.cabeca)}${b.pctAcesso > 0.3 ? ' · acesso difícil: prefira telecomandada' : ''}` })))),
       el('p', { class: 'muted pequeno', text: 'Estimativa de 1ª ordem: um defeito a jusante da chave nova deixa de desligar as UCs entre ela e a proteção atual. Não considera recomposição por manobra nem coordenação; confirme com estudo de proteção.' }))
       : el('p', { class: 'muted pequeno', text: 'Nenhum bloco com ocorrências suficientes (2+) para sugerir chave nova no período.' }),
     el('ul', { class: 'arvore-manobra' }, ordem.map((b) => el('li', { class: `no no--n${Math.min(nivel(b), 4)}` },

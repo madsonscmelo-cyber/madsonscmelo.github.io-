@@ -253,6 +253,43 @@ const SENHA_INICIAL = 'Rede@Raiox2026', SENHA_NOVA = 'Turno#Azul2026x';
     registrar('1.3/1.4', 'CSP só libera o próprio site e os fundos de mapa; recusa abrir dentro de iframe', /Content-Security-Policy/.test(html) && !externosCsp.length && /não pode ser aberto dentro de outra página/.test(dentro || ''), `iframe: "${(dentro || '').trim().slice(0, 60)}"`);
     await ctx.close();
 
+    // ================= Base pública (manifesto + partes com SHA-256, mesma origem) =================
+    {
+      const crypto = require('crypto');
+      const modelo = (f) => fs.readFileSync(path.join(RAIZ, 'alimentadores/modelos', f));
+      const parte = (nome, buf) => ({ arquivo: nome, bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex') });
+      const arquivos = { 'postes_T_p01.csv': modelo('postes.csv'), 'ocorrencias_T_p01.csv': modelo('ocorrencias.csv'), 'compensacoes_T_p01.csv': modelo('compensacoes.csv') };
+      const manifesto = { versao: 'teste-1', titulo: 'Setor Teste', padrao: 'T', utds: [{ id: 'T', nome: 'Teste', postes: [parte('postes_T_p01.csv', arquivos['postes_T_p01.csv'])],
+        ocorrencias: [parte('ocorrencias_T_p01.csv', arquivos['ocorrencias_T_p01.csv'])], compensacoes: [parte('compensacoes_T_p01.csv', arquivos['compensacoes_T_p01.csv'])] }] };
+      let corromper = false, pedidos = 0;
+      const pc = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+      await pc.route('**/campo-mais/raiox/app/**', (r) => {
+        pedidos++;
+        const f = path.basename(new URL(r.request().url()).pathname);
+        if (r.request().method() !== 'GET') return r.fulfill({ status: 405, body: '' });
+        if (f === 'app.json') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(manifesto) });
+        if (!arquivos[f]) return r.fulfill({ status: 404, body: '' });
+        r.fulfill({ status: 200, contentType: 'text/csv', body: corromper && f.startsWith('ocorrencias') ? Buffer.concat([arquivos[f], Buffer.from('x')]) : arquivos[f] });
+      });
+      const q = await pc.newPage();
+      vigiar(q);
+      await q.goto(BASE);
+      await entrar(q, 'G4001');
+      await q.waitForFunction(() => /Setor Teste/.test(document.querySelector('#st-sync')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
+      const pub = await mod(q, async () => { const { estado } = await import('./js/store.js'); const r = estado.rede; return { origem: r.origem, al: r.alimentadores.map((a) => a.id).join(), oc: r.ocorrencias.length, comp: r.compensacoes.length }; });
+      registrar('F13', 'Base pública: ao entrar, o app baixa o manifesto e as partes (conferidas por SHA-256) e abre com os dados', pub.origem === 'PUBLICA' && pub.al === 'ALM-90' && pub.oc === 2 && pub.comp === 4, JSON.stringify(pub));
+      pedidos = 0;
+      await q.reload(); await q.waitForSelector('#nav .nav__btn'); await q.waitForTimeout(800);
+      registrar('F14', 'Versão já baixada não é baixada de novo (só o manifesto é consultado)', pedidos === 1, `${pedidos} requisição(ões) ao recarregar`);
+      manifesto.versao = 'teste-2'; corromper = true;
+      await q.reload(); await q.waitForSelector('#nav .nav__btn');
+      await q.waitForFunction(() => /não foi possível carregar a base publicada/i.test([...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' ')), null, { timeout: 15000 }).catch(() => {});
+      const aposErro = await mod(q, async () => (await import('./js/store.js')).estado.rede.versao);
+      const logFalha = (await acoesLog(q)).some((r) => r.acao === 'BASE_PUBLICA_FALHOU');
+      registrar('F15', 'Parte com conteúdo diferente do manifesto é recusada e a base anterior continua', aposErro === 'pub-teste-1-T' && logFalha, `versão mantida: ${aposErro}`);
+      await pc.close();
+    }
+
     // ================= Celular 360 px, alvos de toque e acessibilidade =================
     const cm = await browser.newContext({ viewport: { width: 360, height: 760 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
     await cm.route(/tile\.openstreetmap\.org|arcgisonline\.com|opentopomap\.org/, (r) => r.abort());

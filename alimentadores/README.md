@@ -41,6 +41,18 @@ Senha inicial de todos os usuários: `Rede@Raiox2026`. O app obriga a criar uma 
 | **Dados** | Mostra a base carregada (sintética ou importada), importa com relatório linha a linha, apaga a base importada e lista os parâmetros dos cálculos |
 | **Acesso** | Usuários, logs com verificação de integridade e política (mesmo módulo dos outros apps) |
 
+## Base pública (carregamento automático)
+
+Ao entrar, o app lê `/campo-mais/raiox/app/app.json` (mesmo site, só leitura; caminho em `js/config.js → basePublica`) e baixa **a UTD escolhida**: Remanso por padrão; as outras ficam no seletor de UTD, nas telas Alimentadores e Dados.
+
+- **Conferência:** cada parte é conferida pelo SHA-256 do manifesto antes de entrar. Arquivo diferente é recusado, e o app segue com a base que já tinha.
+- **Atualização:** o download só acontece quando a `versao` do manifesto muda. Ao reabrir o app, só o manifesto é consultado.
+- **Prioridade:** uma base importada pelo usuário tem prioridade e só é trocada a pedido.
+- **Cache:** a base não entra no Cache Storage do service worker. Ela fica no IndexedDB, versionada pelo manifesto.
+- **Rede:** o único acesso à rede no código é `js/fonte.js` (GET, sem corpo). O teste estático garante isso.
+
+Formato do manifesto: `{ versao, titulo, padrao, utds: [ { id, nome, postes: [{ arquivo, bytes, sha256 }], ocorrencias: [...], compensacoes: [...] } ] }`. Partes com mais de 1 arquivo são concatenadas, e só a primeira parte traz cabeçalho. Para gerar: `ferramentas/montar_base_tratada.py` e depois o fatiamento em partes de até 20 MB.
+
 ## Importação: formato
 
 Os nomes de coluna aceitam variações sem acento e com sinônimos (`lat`/`latitude`, `vegetacao`/`arvore`, `religador`/`RL`…). O separador pode ser `;` ou `,`. Os números podem vir com vírgula decimal. Os modelos estão em `modelos/`.
@@ -88,7 +100,7 @@ bash testes/seguranca-estatica.sh
 cd testes && npm install && npx playwright install chromium && npm run e2e:alimentadores
 ```
 
-Resultado atual: **31/31** verificações ponta a ponta e 0 pendências estáticas. A bateria cobre:
+Resultado atual: **34/34** verificações ponta a ponta e 0 pendências estáticas. A bateria cobre:
 
 - camadas e foco preservado;
 - perguntas prontas;

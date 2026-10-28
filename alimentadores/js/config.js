@@ -3,6 +3,8 @@
 export const CONFIG = Object.freeze({
   modo: 'demo',
   apiUrl: null,
+  // Base pública do Setor Norte (mesmo site, só leitura). O app baixa a UTD escolhida ao abrir. null = só demonstração.
+  basePublica: '/campo-mais/raiox/app/app.json',
 });
 
 export function validarConfig() {

@@ -8,6 +8,7 @@ import { telaCarteira } from './carteira.js';
 import { telaMapa } from './mapa.js';
 import { telaPrioridades } from './prioridades.js';
 import { telaDados } from './dados.js';
+import { sincronizarBasePublica } from './publica.js';
 import { logar } from './auditoria.js';
 import { POLITICA, iniciarSessao, retomarSessao, encerrarSessao, registrarAtividade, situacaoSessao, revalidarUsuario } from './auth.js';
 import { telaLogin, telaTrocaSenha, telaBloqueio, telaAcesso } from './acesso.js';
@@ -39,6 +40,7 @@ function aposEntrar() {
   atualizarTopo();
   history.replaceState({ raiz: true }, '');
   mostrar(INICIAL[estado.usuario.perfil] || 'carteira');
+  sincronizarBasePublica(); // em segundo plano: a tela abre com a base que já está no aparelho
 }
 
 function sair(acao = 'LOGOUT', detalhe = {}) {
@@ -108,13 +110,13 @@ function atualizarTopo() {
   rede.textContent = on ? 'Online' : estado.offlineSimulado ? 'Offline (simulado)' : 'Offline';
   rede.className = `chip ${on ? 'chip--ok' : 'chip--alerta'}`;
   // Qual base está aberta é a informação de status que importa aqui (sintética × importada neste aparelho).
-  const imp = estado.rede?.origem === 'IMPORTADA';
-  const texto = imp ? `Base importada ${fmtDataHora(estado.rede.geradaEm)}` : 'Base sintética (demo)';
+  const imp = estado.rede?.origem === 'IMPORTADA', pub = estado.rede?.origem === 'PUBLICA';
+  const texto = pub ? `${estado.rede.titulo} · ${estado.rede.utdNome}` : imp ? `Base importada ${fmtDataHora(estado.rede.geradaEm)}` : 'Base sintética (demo)';
   const base = $('#st-sync');
-  base.replaceChildren(el('span', { 'aria-hidden': 'true', text: imp ? '📥' : '🧪' }), el('span', { class: 'chip__longo', text: texto }));
+  base.replaceChildren(el('span', { 'aria-hidden': 'true', text: pub ? '🌐' : imp ? '📥' : '🧪' }), el('span', { class: 'chip__longo', text: texto }));
   base.title = texto;
   base.setAttribute('aria-label', texto);
-  base.className = `chip ${imp ? 'chip--ok' : 'chip--aviso'}`;
+  base.className = `chip ${imp || pub ? 'chip--ok' : 'chip--aviso'}`;
   if (estado.usuario) {
     const ini = estado.usuario.nome.split(/\s+/).filter((p) => p.length > 2).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
     $('#btn-usuario').replaceChildren(el('span', { class: 'chip__curto', 'aria-hidden': 'true', text: `${ini} ▾` }), el('span', { class: 'chip__longo', text: `${estado.usuario.nome} ▾` }));

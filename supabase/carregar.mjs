@@ -53,8 +53,8 @@ if (substituir) {
 }
 await lotes('alimentadores', rede.alimentadores, 'id');
 await lotes('postes', ordemTopologica(rede.postes).map((p) => ({ id: p.id, cod: p.cod, al: p.al, pai: p.pai || null, lat: p.lat, lon: p.lon, veg: p.veg, acesso: p.acesso, acesso_motivo: p.acessoMotivo, chave: p.chave, trafo: p.trafo, ucs: p.ucs })), 'id');
-await lotes('ocorrencias', rede.ocorrencias.map((o) => ({ id: `${o.al}|${o.id}`, al: o.al, poste: o.poste, data: o.data, causa: o.causa, ucs: o.ucs, dur: o.dur, chi: o.chi, disp: o.disp || null })), 'id');
-if (substituir) await lotes('compensacoes', rede.compensacoes.map((c) => ({ poste: c.poste, mes: c.mes, valor: c.valor })));
+await lotes('ocorrencias', rede.ocorrencias.map((o) => ({ id: `${o.al}|${o.id}`, al: o.al, poste: o.poste || null, data: o.data, causa: o.causa, ucs: o.ucs, dur: o.dur, chi: o.chi, disp: o.disp || null })), 'id');
+if (substituir) await lotes('compensacoes', rede.compensacoes.map((c) => ({ al: c.al || c.poste.split('|')[0], poste: c.poste || null, mes: c.mes, valor: c.valor })));
 else if (rede.compensacoes.length) console.log('  compensacoes: use --substituir para recarregar (lançamentos não têm chave natural e duplicariam).');
 await rest('POST', 'auditoria', { acao: 'BASE_CARREGADA', user_id: null, detalhe: { alimentadores: rede.alimentadores.length, postes: rede.postes.length, ocorrencias: rede.ocorrencias.length, compensacoes: rede.compensacoes.length, substituir } }, { Prefer: 'return=minimal' });
 console.log('Carga concluída.');

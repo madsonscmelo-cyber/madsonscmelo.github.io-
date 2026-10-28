@@ -39,9 +39,9 @@ create index if not exists postes_al on public.postes (al);
 create table if not exists public.ocorrencias (
   id     text primary key,
   al     text not null references public.alimentadores (id) on delete cascade,
-  poste  text not null references public.postes (id) on delete cascade,
+  poste  text references public.postes (id) on delete cascade,   -- nulo = origem não identificada (conta só no alimentador)
   data   timestamp not null,
-  causa  text not null check (causa in ('VEG', 'DESC', 'EQUIP', 'ANIMAL', 'TERCEIRO', 'OUTRA')),
+  causa  text not null check (causa in ('VEG', 'DESC', 'EQUIP', 'ANIMAL', 'TERCEIRO', 'CLIMA', 'PROG', 'OUTRA')),
   ucs    integer not null check (ucs > 0),
   dur    numeric(8, 2) not null check (dur > 0 and dur <= 240),
   chi    numeric(14, 1) not null,
@@ -51,7 +51,8 @@ create index if not exists ocorrencias_al_data on public.ocorrencias (al, data);
 
 create table if not exists public.compensacoes (
   id     bigint generated always as identity primary key,
-  poste  text not null references public.postes (id) on delete cascade,
+  al     text not null references public.alimentadores (id) on delete cascade,
+  poste  text references public.postes (id) on delete cascade,   -- nulo = compensação do alimentador sem trafo identificado
   mes    text not null check (mes ~ '^\d{4}-(0\d|1[0-2])$'),   -- AAAA-MM, ou AAAA-00 para valor anual
   valor  numeric(14, 2) not null check (valor > 0)
 );
@@ -97,8 +98,7 @@ create policy postes_ler on public.postes for select to authenticated using (pub
 drop policy if exists oc_ler on public.ocorrencias;
 create policy oc_ler on public.ocorrencias for select to authenticated using (public.pode_ver_alimentador(al));
 drop policy if exists comp_ler on public.compensacoes;
-create policy comp_ler on public.compensacoes for select to authenticated
-  using (exists (select 1 from public.postes p where p.id = poste and public.pode_ver_alimentador(p.al)));
+create policy comp_ler on public.compensacoes for select to authenticated using (public.pode_ver_alimentador(al));
 
 drop policy if exists aud_incluir on public.auditoria;
 create policy aud_incluir on public.auditoria for insert to authenticated with check (user_id = auth.uid());

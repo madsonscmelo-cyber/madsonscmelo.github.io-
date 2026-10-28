@@ -9,7 +9,7 @@ export const PERFIS = {
   AUDITOR: 'Auditoria',
 };
 
-export const CAUSAS = { VEG: 'Vegetação', DESC: 'Descarga atmosférica', EQUIP: 'Falha de equipamento', ANIMAL: 'Animal', TERCEIRO: 'Terceiros', OUTRA: 'Outra / não identificada' };
+export const CAUSAS = { VEG: 'Vegetação', DESC: 'Descarga atmosférica', EQUIP: 'Falha de equipamento', ANIMAL: 'Animal', TERCEIRO: 'Terceiros', CLIMA: 'Chuva, vento e fenômenos naturais', PROG: 'Desligamento programado', OUTRA: 'Outra / não identificada' };
 // DJ = disjuntor da SE, RL = religador, CS = chave seccionadora (manobra), CF = chave fusível, NA = chave normalmente aberta (interligação).
 export const CHAVES = { DJ: 'Disjuntor (SE)', RL: 'Religador', CS: 'Seccionadora', CF: 'Chave fusível', NA: 'Interligação (NA)' };
 export const PROTECAO = new Set(['DJ', 'RL', 'CF']); // atuam sozinhas no defeito
@@ -96,16 +96,18 @@ export function indexar(rede, alId) {
   }
   let km = 0;
   for (const p of postes) if (p.pai && porId.has(p.pai)) km += distM(p, porId.get(p.pai)) / 1000;
-  const ocorrencias = rede.ocorrencias.filter((o) => o.al === alId && porId.has(o.poste));
+  // Ocorrência sem poste (origem não identificada) conta no alimentador; as demais também no poste.
+  const ocorrencias = rede.ocorrencias.filter((o) => o.al === alId && (!o.poste || porId.has(o.poste)));
   const ocPorPoste = new Map();
   for (const o of ocorrencias) { if (!ocPorPoste.has(o.poste)) ocPorPoste.set(o.poste, []); ocPorPoste.get(o.poste).push(o); }
-  const compPorPoste = new Map();
+  const compPorPoste = new Map(), compAl = [];
   for (const c of rede.compensacoes || []) {
+    if (!c.poste && c.al === alId) { compAl.push(c); continue; }
     if (!porId.has(c.poste)) continue;
     if (!compPorPoste.has(c.poste)) compPorPoste.set(c.poste, []);
     compPorPoste.get(c.poste).push(c);
   }
-  const idx = { al, postes, porId, filhos, raizes, tin, tout, ordem, prof, ucsSub, km, ocorrencias, ocPorPoste, compPorPoste, ucsTotal: postes.reduce((s, p) => s + (p.ucs || 0), 0) };
+  const idx = { al, postes, porId, filhos, raizes, tin, tout, ordem, prof, ucsSub, km, ocorrencias, ocPorPoste, compPorPoste, compAl, ucsTotal: postes.reduce((s, p) => s + (p.ucs || 0), 0) };
   idx.jusante = (a, b) => tin.get(a) <= tin.get(b) && tin.get(b) < tout.get(a); // b está a jusante de a (ou é a)
   cache.set(chave, idx);
   return idx;
@@ -127,7 +129,7 @@ export function statsPostes(idx, per) {
   const m = new Map();
   const s = (id) => { if (!m.has(id)) m.set(id, { n: 0, chi: 0, ci: 0, horas: 0, causas: {}, comp: 0 }); return m.get(id); };
   for (const o of idx.ocorrencias) {
-    if (!noPeriodo(o.data, per)) continue;
+    if (!o.poste || !noPeriodo(o.data, per)) continue;
     const x = s(o.poste);
     x.n++; x.chi += o.chi; x.ci += o.ucs; x.horas += o.dur;
     x.causas[o.causa] = (x.causas[o.causa] || 0) + o.chi;
@@ -157,6 +159,7 @@ export function metricas(idx, per) {
     if (idx.porId.get(o.poste)?.acesso === 'DIFICIL') { horasDif += o.dur; nDif++; } else { horasNorm += o.dur; nNorm++; }
   }
   for (const cs of idx.compPorPoste.values()) for (const c of cs) if (compNoPeriodo(c, per)) comp += c.valor;
+  for (const c of idx.compAl) if (compNoPeriodo(c, per)) comp += c.valor;
   const u = idx.ucsTotal || 1;
   const stats = statsPostes(idx, per);
   const reinc = [...stats.values()].filter((x) => x.n >= PARAMS.reincidenciaMin).length;
@@ -336,23 +339,38 @@ export function blocos(idx, stats, per) {
 /**
  * Chave nova no poste X do bloco: um defeito a jusante de X passa a desligar só as UCs a jusante de X.
  * CHI evitado(X) = Σ ocorrências originadas a jusante de X (dentro do bloco) × (UCs que caíram − UCs a jusante de X) × duração.
+ * Ocorrência registrada na própria chave do bloco (origem exata desconhecida) entra com peso = km a jusante de X ÷ km do bloco.
  * É uma estimativa de primeira ordem: não considera manobra de recomposição nem coordenação de proteção.
  */
 export function sugerirChave(idx, membros, cab, per) {
   const oc = [];
   for (const id of membros) for (const o of idx.ocPorPoste.get(id) || []) if (noPeriodo(o.data, per)) oc.push(o);
   if (oc.length < 2) return null;
+  // Exposição: km de rede de cada poste até o fim do bloco (sem atravessar as chaves que abrem outros blocos).
+  const noBloco = new Set(membros), kmAbaixo = new Map();
+  for (let k = membros.length - 1; k >= 0; k--) {
+    const id = membros[k];
+    let km = 0;
+    for (const f of idx.filhos.get(id)) if (noBloco.has(f)) km += distM(idx.porId.get(f), idx.porId.get(id)) / 1000 + (kmAbaixo.get(f) || 0);
+    kmAbaixo.set(id, km);
+  }
+  const kmBloco = kmAbaixo.get(cab) || 0;
   let melhor = null;
   for (const x of membros) {
     if (x === cab) continue;
-    const ux = idx.ucsSub.get(x);
+    const ux = idx.ucsSub.get(x), frac = kmBloco ? (kmAbaixo.get(x) || 0) / kmBloco : 0;
     let evitado = 0, nAbaixo = 0;
     for (const o of oc) {
-      if (!idx.jusante(x, o.poste)) continue;
-      nAbaixo++;
-      evitado += Math.max(0, o.ucs - ux) * o.dur;
+      if (o.poste === cab) {
+        // Ocorrência registrada na própria chave que abriu: o defeito pode ter sido em qualquer ponto do bloco,
+        // com chance proporcional aos km. Conta a fração do bloco que fica a jusante de X.
+        evitado += Math.max(0, o.ucs - ux) * o.dur * frac; nAbaixo += frac;
+      } else if (idx.jusante(x, o.poste)) {
+        nAbaixo++;
+        evitado += Math.max(0, o.ucs - ux) * o.dur;
+      }
     }
-    if (nAbaixo >= 2 && (!melhor || evitado > melhor.chiEvitado)) melhor = { poste: idx.porId.get(x), chiEvitado: evitado, ocorrencias: nAbaixo, ucsJusante: ux };
+    if (nAbaixo >= 2 && (!melhor || evitado > melhor.chiEvitado)) melhor = { poste: idx.porId.get(x), chiEvitado: evitado, ocorrencias: Math.round(nAbaixo * 10) / 10, ucsJusante: ux };
   }
   return melhor && melhor.chiEvitado > 0 ? melhor : null;
 }

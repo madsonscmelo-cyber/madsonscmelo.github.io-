@@ -67,7 +67,7 @@ export async function carregar() {
     }
   }
   // Base sintética é refeita a cada dia (datas relativas a hoje). Base importada nunca é trocada sem ação do usuário.
-  if (rede?.origem === 'IMPORTADA' || (rede?.origem === 'SINTETICA' && rede.versao?.endsWith(hojeISO()))) estado.rede = rede;
+  if (rede?.origem === 'IMPORTADA' || rede?.origem === 'PUBLICA' || (rede?.origem === 'SINTETICA' && rede.versao?.endsWith(hojeISO()))) estado.rede = rede;
   else { estado.rede = gerarRede(); await salvarRede(); }
   await persistir();
 }

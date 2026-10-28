@@ -5,6 +5,19 @@ import { estado } from './store.js';
 import { carteira, periodos } from './dominio.js';
 import { kpi, delta, fmt1, fmt2, fmtChi, fmtR, barra } from './ui.js';
 import { logar } from './auditoria.js';
+import { sincronizarBasePublica } from './publica.js';
+
+export const descricaoBase = (r) => (r.origem === 'PUBLICA' ? `${r.titulo} · UTD ${r.utdNome}` : r.origem === 'IMPORTADA' ? 'base importada neste aparelho' : 'base sintética de demonstração');
+
+/** Seletor de UTD da base pública (cada UTD é baixada sob demanda: o celular não carrega as 4 de uma vez). */
+export function seletorUTD() {
+  const m = estado.manifesto;
+  if (!m) return null;
+  const atual = estado.rede.origem === 'PUBLICA' ? estado.rede.utd : '';
+  return el('select', { class: 'campo__input', 'aria-label': 'UTD da base publicada', onchange: (e) => { if (e.target.value) sincronizarBasePublica({ forcarUtd: e.target.value }); } },
+    atual ? null : el('option', { value: '', text: 'Carregar UTD do Setor Norte…' }),
+    m.utds.map((u) => el('option', { value: u.id, text: `UTD ${u.nome}`, selected: u.id === atual })));
+}
 
 const ORDENS = { chi: 'CHI', comp: 'Compensação', dec: 'DEC', dChi: 'Piora do CHI', reinc: 'Reincidentes' };
 
@@ -37,8 +50,8 @@ export function telaCarteira(raiz, ctx) {
 
   preencher(raiz,
     el('header', { class: 'tela__topo' }, el('div', {}, el('h1', { text: 'Alimentadores' }),
-      el('p', { class: 'muted pequeno', text: `${P.ATUAL.rotulo} × ${P.ANTERIOR_MP.rotulo} · base ${estado.rede.origem === 'IMPORTADA' ? 'importada neste aparelho' : 'sintética de demonstração'}` })),
-    el('div', { class: 'linha' }, selConj, selOrdem, exportar)),
+      el('p', { class: 'muted pequeno', text: `${P.ATUAL.rotulo} × ${P.ANTERIOR_MP.rotulo} · ${descricaoBase(estado.rede)}` })),
+    el('div', { class: 'linha' }, seletorUTD(), selConj, selOrdem, exportar)),
     el('div', { class: 'kpis' },
       kpi('DEC', `${fmt2(chiA / ucs)} h`, `${P.ANTERIOR_MP.curto}: ${fmt2(chiB / ucs)} h`, delta(d(chiA, chiB))),
       kpi('FEC', fmt2(ciA / ucs), `${P.ANTERIOR_MP.curto}: ${fmt2(ciB / ucs)}`, delta(d(ciA, ciB))),

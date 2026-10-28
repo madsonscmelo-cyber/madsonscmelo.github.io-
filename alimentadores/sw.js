@@ -1,12 +1,12 @@
 // Service worker: app shell em network-first (pega atualização quando há rede; abre sem rede pelo cache).
-// Só arquivos do app vão para o Cache Storage: a base da rede (inclusive a importada) fica no IndexedDB, nunca no cache.
+// Só arquivos do app vão para o Cache Storage: a base da rede (importada ou publicada) fica no IndexedDB, nunca no cache.
 // Tiles do OpenStreetMap não são interceptados (origem externa).
-const VERSAO = 'raiox-v1';
+const VERSAO = 'raiox-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'css/app.css',
   '../app/vendor/leaflet/leaflet.js', '../app/vendor/leaflet/leaflet.css',
   'js/compat.js', 'js/main.js', 'js/util.js', 'js/store.js', 'js/seed.js', 'js/dominio.js', 'js/importar.js', 'js/ui.js',
-  'js/carteira.js', 'js/mapa.js', 'js/prioridades.js', 'js/dados.js', 'js/config.js', 'js/auth.js', 'js/auditoria.js', 'js/acesso.js',
+  'js/fonte.js', 'js/publica.js', 'js/carteira.js', 'js/mapa.js', 'js/prioridades.js', 'js/dados.js', 'js/config.js', 'js/auth.js', 'js/auditoria.js', 'js/acesso.js',
   'modelos/postes.csv', 'modelos/ocorrencias.csv', 'modelos/compensacoes.csv',
 ];
 
@@ -25,6 +25,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // A base pública (outra pasta do site) não passa pelo cache do app: ela fica no IndexedDB, versionada pelo manifesto.
+  if (!url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
   e.respondWith(fetch(req).then((r) => {
     if (r.ok) { const cp = r.clone(); caches.open(VERSAO).then((c) => c.put(req, cp)); }
     return r;

@@ -4,6 +4,8 @@ import { estado, substituirRede, restaurarRedeSintetica } from './store.js';
 import { PARAMS, PERFIS } from './dominio.js';
 import { montarBase, LIMITES } from './importar.js';
 import { logar } from './auditoria.js';
+import { sincronizarBasePublica } from './publica.js';
+import { seletorUTD } from './carteira.js';
 
 const PODE_IMPORTAR = ['GESTOR', 'ANALISTA'];
 let ultimoRelatorio = null;
@@ -62,13 +64,17 @@ export function telaDados(raiz) {
 
   preencher(raiz,
     el('header', { class: 'tela__topo' }, el('h1', { text: 'Dados' })),
-    el('section', { class: `bloco ${r.origem === 'IMPORTADA' ? 'bloco--ok' : 'bloco--aviso'}` },
-      el('h2', { text: r.origem === 'IMPORTADA' ? 'Base importada neste aparelho' : 'Base sintética de demonstração' }),
+    el('section', { class: `bloco ${r.origem === 'SINTETICA' ? 'bloco--aviso' : 'bloco--ok'}` },
+      el('h2', { text: r.origem === 'PUBLICA' ? `Base publicada: ${r.titulo} · UTD ${r.utdNome}` : r.origem === 'IMPORTADA' ? 'Base importada neste aparelho' : 'Base sintética de demonstração' }),
       el('p', { text: `${r.alimentadores.length} alimentadores · ${fmtNum(r.postes.length)} postes · ${fmtNum(r.ocorrencias.length)} ocorrências · ${fmtNum(r.compensacoes.length)} lançamentos de compensação${datas.length ? ` · ocorrências de ${datas[0].slice(0, 10)} a ${datas.at(-1).slice(0, 10)}` : ''}` }),
-      el('p', { class: 'muted pequeno', text: r.origem === 'IMPORTADA' ? `Carregada em ${fmtDataHora(r.geradaEm)}. Fica só no IndexedDB deste navegador: não vai para o GitHub, não vai para servidor. Quem usa este aparelho com outra matrícula enxerga a mesma base.` : 'Alimentadores, postes, ocorrências e valores fictícios. Não representam nenhuma rede real.' }),
+      r.origem === 'PUBLICA' ? el('p', { class: 'muted pequeno', text: `Baixada do site ao abrir o app e conferida pelo SHA-256 de cada arquivo (${fmtNum(r.rel?.aceitas || 0)} linhas aceitas, ${fmtNum(r.rel?.recusadas || 0)} recusadas). Para ver outra UTD, escolha abaixo; cada UTD é baixada só quando pedida.` }) : null,
+      estado.manifesto ? el('div', { class: 'linha' }, seletorUTD()) : null,
+      r.origem === 'PUBLICA' && r.rel?.avisos?.length ? el('ul', { class: 'lista pequeno' }, r.rel.avisos.map((a) => el('li', { class: 'lista__item', text: `⚠ ${a}` }))) : null,
+      el('p', { class: 'muted pequeno', text: r.origem === 'PUBLICA' ? '' : r.origem === 'IMPORTADA' ? `Carregada em ${fmtDataHora(r.geradaEm)}. Fica só no IndexedDB deste navegador: não vai para o GitHub, não vai para servidor. Quem usa este aparelho com outra matrícula enxerga a mesma base.` : 'Alimentadores, postes, ocorrências e valores fictícios. Não representam nenhuma rede real.' }),
       r.origem === 'IMPORTADA' && pode ? el('button', { type: 'button', class: 'btn btn--perigo', text: 'Apagar base importada deste aparelho', onclick: async () => {
-        if (!confirm('Apagar a base importada deste aparelho e voltar para a demonstração?')) return;
+        if (!confirm('Apagar a base importada deste aparelho? O app volta para a base publicada (ou para a demonstração, se não houver).')) return;
         await restaurarRedeSintetica();
+        sincronizarBasePublica();
         logar({ categoria: 'ESCRITA', acao: 'BASE_IMPORTADA_APAGADA' });
         toast('Base importada apagada.', { tipo: 'ok' });
         telaDados(raiz);

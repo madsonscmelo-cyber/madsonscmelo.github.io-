@@ -864,3 +864,4 @@ i.mk--chi, i.mk--reinc, i.mk--comp, i.mk--aceso { width: 16px; height: 16px; fon
 .mapa--satelite .cluster { stroke-opacity: .55; }
 .mk--risco { background: #ad1457; }
 i.mk--risco { width: 16px; height: 16px; font-size: 9px; }
+.carga-base { position: fixed; left: 50%; top: calc(var(--topo-h) + .8rem); transform: translateX(-50%); z-index: 1600; width: min(420px, calc(100vw - 2rem)); }
